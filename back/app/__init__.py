@@ -1,0 +1,1 @@
+"""EXOMA CARE backend application."""
