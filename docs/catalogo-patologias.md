@@ -71,3 +71,31 @@ Esta entrega todavía no registra validaciones de pacientes.
 
 Desde `back`: `python -m pytest -q`. Se prueban la regla, persistencia en
 SQLite, migraciones, endpoints, login real y permisos con datos ficticios.
+
+## Frontend y ejecución local
+
+Desde `back`, definir `JWT_SECRET_KEY` con un secreto aleatorio de al menos
+32 bytes y opcionalmente `DATABASE_URL`; ejecutar las migraciones y luego
+`python -m uvicorn app.main:app --host 127.0.0.1 --port 8000`.
+Desde `front`, ejecutar `npm ci` y `npm run dev`.
+Vite reenvía `/api` a 127.0.0.1:8000, por lo que el navegador usa el mismo
+origen. En un despliegue se deberá configurar su proxy equivalente.
+
+El formulario existente ahora usa email, como el backend. La respuesta del
+login conserva `rol` como etiqueta y agrega `role` con el código estable.
+Gerente y médico acceden a `/catalogo/patologias`. Los demás portales aún no
+están implementados; no se presentan como funcionales.
+
+El token permanece solo en memoria. Recargar o cerrar la pestaña termina la
+sesión local; el cierre de sesión descarta el token, no lo revoca en servidor.
+Un 401 elimina la sesión y devuelve al login. No hay persistencia de sesión,
+recuperación de contraseña, primer acceso ni segundo factor en esta entrega.
+Se quitó la casilla visual de recordar dispositivo porque todavía no funciona.
+Estos límites deben coordinarse con Camila antes de ampliar autenticación.
+
+Pruebas frontend: `npm test`, `npm run lint` y `npm run build` desde `front`.
+Se usa el runner integrado de Node y happy-dom, solo como dependencia de
+desarrollo. Las pruebas renderizan componentes React e interactúan con sus
+controles; simulan respuestas HTTP. Las pruebas de backend verifican aparte
+login, permisos y persistencia real con bases temporales. No equivalen a una
+revisión visual o una prueba completa de navegador.

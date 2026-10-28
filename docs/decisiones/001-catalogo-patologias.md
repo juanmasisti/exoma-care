@@ -37,3 +37,22 @@ Antes del alta de pacientes deberán resolverse con el equipo.
 
 La referencia CCB de la transcripción es un error: el archivo para el envío
 se genera en formato CSV (.csv). Esta corrección aplica al dominio compartido.
+
+## Apoyo mínimo de acceso para esta entrega
+
+Se conecta el login existente a la API y se agrega el código estable `role`
+sin eliminar la etiqueta `rol`. Se verifica JWT y el usuario/rol actual en BD.
+Esto permite probar EC-06 con gerente y médico sin autorizarlo por datos
+enviados desde el navegador. La gestión completa de identidad sigue asignada
+a Camila; el segundo factor y primer acceso continúan pendientes.
+
+La sesión temporal vive en memoria. No se introducen tokens en almacenamiento
+persistente del navegador. Esta decisión reversible permite integrar la
+solución definitiva de Camila sin trasladar autenticación al módulo clínico.
+
+## Integridad y migraciones
+
+Las tablas del catálogo están separadas de usuarios y pacientes. Se versiona
+primero el esquema recibido (0001) y luego el catálogo (0002), sin migración
+automática al iniciar. SQLite habilita claves foráneas en cada conexión de la
+aplicación. La carga DEMO es optativa y no configura patologías reales.
