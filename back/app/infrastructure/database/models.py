@@ -54,4 +54,3 @@ class Paciente(Base):
 
 # Keep the names used by the existing database seeder and application code.
 UserModel = Usuario
-
