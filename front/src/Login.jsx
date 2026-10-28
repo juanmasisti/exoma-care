@@ -12,6 +12,7 @@ import {
 import dnaVideo from './assets/dna-background.mp4'
 import dnaPoster from './assets/dna-poster.jpg'
 import './Login.css'
+import { login, errorMessage } from './services/api.js'
 
 const roleRoutes = {
   paciente: '/paciente/dashboard',
@@ -57,7 +58,6 @@ function DnaBackground() {
 function Login() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
-  const [rememberDevice, setRememberDevice] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -69,28 +69,14 @@ function Login() {
     setError('')
 
     try {
-      const user = await new Promise((resolve) => {
-        window.setTimeout(() => {
-          resolve({
-            id: 'exoma-demo-user',
-            identificador: identifier,
-            rol: 'paciente',
-          })
-        }, 900)
-      })
-
-      const destination = roleRoutes[user.rol]
-      if (!destination) {
-        throw new Error('No se encontró un portal para el rol de esta cuenta.')
-      }
+      const user = await login(identifier, password)
+      const destination = ['medical_manager', 'treating_physician'].includes(user.role)
+        ? '/catalogo/patologias'
+        : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
 
       navigate(destination)
     } catch (loginError) {
-      setError(
-        loginError instanceof Error
-          ? loginError.message
-          : 'No se pudo iniciar sesión. Intentá nuevamente.',
-      )
+      setError(errorMessage(loginError))
     } finally {
       setIsLoading(false)
     }
@@ -114,7 +100,7 @@ function Login() {
 
           <form className="login-form" onSubmit={handleLogin}>
             <div className="login-field">
-              <label htmlFor="identifier">DNI, Pasaporte o Email</label>
+              <label htmlFor="identifier">Email</label>
               <div className="login-input-wrap">
                 <Fingerprint
                   className="login-input-icon"
@@ -124,9 +110,9 @@ function Login() {
                 <input
                   id="identifier"
                   name="identifier"
-                  type="text"
+                  type="email"
                   autoComplete="username"
-                  placeholder="Ej. 38.450.912"
+                  placeholder="nombre@ejemplo.com"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
                   required
@@ -174,15 +160,6 @@ function Login() {
                 </button>
               </div>
             </div>
-
-            <label className="login-remember">
-              <input
-                type="checkbox"
-                checked={rememberDevice}
-                onChange={(event) => setRememberDevice(event.target.checked)}
-              />
-              <span>Recordar en este dispositivo confiable</span>
-            </label>
 
             {error && (
               <p className="login-error" role="alert">
