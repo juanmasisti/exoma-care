@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date
 
 from sqlalchemy import Date, Enum as SQLAlchemyEnum, ForeignKey, String
@@ -52,3 +54,4 @@ class Paciente(Base):
 
 # Keep the names used by the existing database seeder and application code.
 UserModel = Usuario
+
