@@ -74,8 +74,10 @@ SQLite, migraciones, endpoints, login real y permisos con datos ficticios.
 
 ## Frontend y ejecución local
 
-Desde `back`, definir `JWT_SECRET_KEY` con un secreto aleatorio de al menos
-32 bytes y opcionalmente `DATABASE_URL`; ejecutar las migraciones y luego
+Desde `back`, copiar `.env.example` como `.env`, completar `JWT_SECRET_KEY`
+con un secreto aleatorio de al menos 32 bytes y configurar `DATABASE_URL` si
+corresponde. La configuración se lee automáticamente; las variables del proceso
+tienen prioridad sobre el archivo. Ejecutar las migraciones y luego
 `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000`.
 Desde `front`, ejecutar `npm ci` y `npm run dev`.
 Vite reenvía `/api` a 127.0.0.1:8000, por lo que el navegador usa el mismo
