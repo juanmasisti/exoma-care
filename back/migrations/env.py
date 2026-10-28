@@ -1,12 +1,11 @@
-import os
-
 from alembic import context
 from sqlalchemy import create_engine, pool
 
+from app.config import get_settings
 from app.infrastructure.database.session import Base
 from app.infrastructure.database import models, catalog_models  # noqa: F401
 
-url = os.environ.get("DATABASE_URL", "sqlite:///./exoma_care.db")
+url = get_settings().database_url
 
 if context.is_offline_mode():
     context.configure(url=url, target_metadata=Base.metadata, literal_binds=True)

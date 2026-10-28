@@ -1,10 +1,9 @@
-import os
-
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.config import get_jwt_secret
 from app.api.dependencies import get_database_session
 from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
@@ -25,9 +24,7 @@ def get_current_user(
     )
     if credentials is None:
         raise unauthorized
-    secret = os.environ.get("JWT_SECRET_KEY")
-    if not secret:
-        raise RuntimeError("La variable JWT_SECRET_KEY es obligatoria.")
+    secret = get_jwt_secret()
     try:
         payload = jwt.decode(credentials.credentials, secret, algorithms=["HS256"],
                              options={"require": ["sub", "exp", "iat"]})
