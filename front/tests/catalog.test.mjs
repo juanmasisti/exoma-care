@@ -72,7 +72,7 @@ async function render(session = manager) {
 }
 async function settle() { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 310)) }) }
 function button(name) {
-  const result = [...container.querySelectorAll('button')].find((b) => b.textContent.trim() === name)
+  const result = [...container.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent.trim()) === name)
   assert.ok(result, `No se encontró botón ${name}`)
   return result
 }
@@ -164,4 +164,38 @@ test('un paciente no ve ni consulta el catálogo', async () => {
   await render({ ...manager, role: 'patient', rol: 'Paciente' })
   assert.match(container.textContent, /portal de tu perfil todavía no está disponible/)
   assert.equal(requests.length, 0)
+})
+
+
+test('buscar por nombre filtra el listado y permite recuperar los resultados', async () => {
+  pathologies = [basePathology(), { ...basePathology(), id: 2, name: 'Otra patología' }]
+  await render(physician)
+  await change(control('Buscar patología'), 'OTRA')
+  const list = container.querySelector('[aria-label="Patologías"]')
+  assert.equal(list.querySelectorAll('.catalog-pathology-list button').length, 1)
+  assert.equal(list.querySelector('.catalog-pathology-list button').getAttribute('aria-label'), 'Otra patología')
+  await change(control('Buscar patología'), 'sin coincidencias')
+  assert.match(list.textContent, /No se encontraron patologías/)
+  await change(control('Buscar patología'), '')
+  assert.equal(list.querySelectorAll('.catalog-pathology-list button').length, 2)
+})
+
+test('cerrar sesión desde el encabezado retira el catálogo y vuelve al login', async () => {
+  pathologies = [basePathology()]
+  await render(physician)
+  assert.match(container.querySelector('[aria-label="Área clínica"]').textContent, /Médico tratante/)
+  await click(button('Cerrar sesión'))
+  assert.match(container.textContent, /Iniciar sesión/)
+  assert.equal(container.querySelector('[aria-label="Área clínica"]'), null)
+})
+
+test('cambiar síntomas descarta un resultado de validación anterior', async () => {
+  pathologies = [basePathology()]
+  await render(physician); await selectPathology()
+  await change(control('Seleccionar síntomas presentes'), '1')
+  await click(button('Validar sospecha'))
+  assert.match(container.textContent, /Sospecha consistente/)
+  await change(control('Seleccionar síntomas presentes'), '2')
+  assert.doesNotMatch(container.textContent, /Sospecha consistente/)
+  assert.equal(container.querySelector('.validation-result'), null)
 })

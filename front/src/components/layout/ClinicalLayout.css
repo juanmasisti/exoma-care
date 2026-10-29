@@ -1,0 +1,37 @@
+.clinical-shell { --clinical-primary: #4f46e5; --clinical-ink: #0f172a; --clinical-muted: #475569; --clinical-line: #e2e8f0; min-height: 100dvh; display: flex; color: var(--clinical-ink); background: #f7f7fc; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
+.clinical-sidebar { flex: 0 0 258px; width: 258px; background: #fff; border-right: 1px solid var(--clinical-line); display: flex; flex-direction: column; height: 100dvh; position: sticky; top: 0; }
+.clinical-brand { display: flex; align-items: center; gap: 12px; min-height: 98px; padding: 24px 20px; text-decoration: none; border-bottom: 1px solid var(--clinical-line); }
+.clinical-brand-icon { width: 40px; height: 40px; background: var(--clinical-primary); color: #fff; display: grid; place-items: center; border-radius: 12px; flex-shrink: 0; }
+.clinical-brand strong { display: block; font-size: 23px; letter-spacing: -.8px; line-height: 1.1; }
+.clinical-brand strong span { color: var(--clinical-primary); }
+.clinical-brand small { display: block; margin-top: 7px; font-size: 8.5px; font-weight: 750; letter-spacing: 1.35px; color: var(--clinical-primary); }
+.clinical-role { background: #f8fafc; padding: 14px 20px; border-bottom: 1px solid var(--clinical-line); display: grid; gap: 7px; }
+.clinical-role > span { font-size: 10px; text-transform: uppercase; font-weight: 650; letter-spacing: 1px; color: #64748b; }
+.clinical-role strong { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--clinical-primary); }
+.clinical-role i { width: 7px; height: 7px; border-radius: 50%; background: var(--clinical-primary); }
+.clinical-navigation { padding: 24px 12px; }
+.clinical-navigation > p { margin: 0 12px 12px; font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; }
+.clinical-nav-active { display: flex; align-items: center; gap: 11px; padding: 13px 12px; border-radius: 9px; background: #eef2ff; color: #4338ca; text-decoration: none; }
+.clinical-nav-active > span { flex: 1; }
+.clinical-nav-active strong { display: block; font-size: 13px; font-weight: 650; }
+.clinical-nav-active small { display: block; margin-top: 4px; font-size: 11px; color: #64748b; }
+.clinical-sidebar-footer { margin-top: auto; padding: 16px 12px; background: #f8fafc; border-top: 1px solid var(--clinical-line); }
+.clinical-profile { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--clinical-line); padding: 12px 10px; border-radius: 9px; }
+.clinical-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; color: #4338ca; background: #eef2ff; border: 1px solid #e0e7ff; border-radius: 50%; font-size: 11px; font-weight: 750; }
+.clinical-profile strong { display: block; font-size: 12px; }
+.clinical-profile small { display: block; font-size: 10px; color: #64748b; margin-top: 4px; }
+.clinical-sidebar-footer > p { display: flex; justify-content: center; gap: 6px; align-items: center; font-size: 10px; color: #64748b; margin: 14px 0 0; }
+.clinical-workspace { flex: 1; min-width: 0; }
+.clinical-topbar { min-height: 68px; padding: 14px 32px; background: #fff; border-bottom: 1px solid var(--clinical-line); display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.clinical-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; color: #64748b; }
+.clinical-breadcrumb strong { color: #334155; font-weight: 600; }
+.clinical-logout { display: flex; align-items: center; gap: 7px; white-space: nowrap; padding: 9px 12px; background: #fff; border: 1px solid var(--clinical-line); border-radius: 8px; font: inherit; font-size: 12px; color: #475569; cursor: pointer; }
+.clinical-logout:hover { background: #f8fafc; color: #0f172a; }
+.clinical-main { outline: none; }
+.clinical-shell :is(a, button):focus-visible { outline: 3px solid #6366f1; outline-offset: 3px; }
+.clinical-skip-link { position: fixed; left: 16px; top: -100px; z-index: 20; background: #fff; color: #4338ca; padding: 12px; border: 2px solid #4338ca; border-radius: 6px; }
+.clinical-skip-link:focus { top: 12px; }
+@media (min-width: 1600px) { .clinical-main { max-width: 1400px; margin: auto; } }
+@media (max-width: 1100px) { .clinical-sidebar { flex-basis: 220px; width: 220px; } .clinical-brand { padding-inline: 16px; gap: 9px; } .clinical-brand strong { font-size: 21px; } .clinical-topbar { padding-inline: 24px; } }
+@media (max-width: 850px) { .clinical-shell { display: block; } .clinical-sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--clinical-line); display: grid; grid-template-columns: auto 1fr; } .clinical-brand { min-height: 82px; border: 0; padding: 16px 20px; } .clinical-role { background: #fff; border: 0; justify-self: end; align-self: center; padding: 16px 20px; } .clinical-navigation { grid-column: 1 / -1; padding: 0 16px 12px; } .clinical-navigation > p, .clinical-nav-active small, .clinical-sidebar-footer { display: none; } .clinical-nav-active { padding: 10px 12px; } .clinical-nav-active > svg:last-child { display: none; } .clinical-topbar { min-height: 58px; padding: 10px 20px; } }
+@media (max-width: 480px) { .clinical-role > span { display: none; } .clinical-role { padding-inline: 10px; } .clinical-role strong { font-size: 10px; } .clinical-brand { padding-inline: 16px; } .clinical-brand strong { font-size: 20px; } .clinical-brand-icon { width: 34px; height: 34px; } .clinical-brand small { font-size: 7px; letter-spacing: .9px; } .clinical-topbar { padding-inline: 16px; } .clinical-breadcrumb { gap: 5px; font-size: 10px; } .clinical-logout { padding: 8px; font-size: 11px; } }
