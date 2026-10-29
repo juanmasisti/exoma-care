@@ -1,16 +1,64 @@
 # Backend
 
-API de Exoma Care desarrollada con FastAPI, SQLAlchemy y Python. La aplicación
-se ejecuta desde esta carpeta con `uvicorn app.main:app`; la configuración
-local, como `JWT_SECRET_KEY`, se proporciona mediante variables de entorno y
-nunca se guarda en el repositorio. Las dependencias están declaradas en
-`requirements.txt`.
+API de Exoma Care con Python, FastAPI y SQLAlchemy.
+Los comandos siguientes son para **Git Bash**.
 
-## Carpetas
+## Arranque diario
 
-- [`app/`](./app/README.md): aplicación y código de producción, separado por
-  capas.
-- [`tests/`](./tests/README.md): pruebas automatizadas del backend.
+Desde la carpeta `back`, con el entorno y `.env` preparados:
 
-El entorno virtual, las cachés, bases de datos locales y otros archivos
-generados son artefactos de desarrollo, no código fuente.
+```bash
+bash dev.sh
+```
+
+Inicia Uvicorn en http://127.0.0.1:8000 con recarga al modificar código.
+Documentación interactiva: http://127.0.0.1:8000/docs.
+Detener con Ctrl+C. El script usa el Python de `.venv` sin activar el entorno.
+También puede ejecutarse desde la raíz con `bash back/dev.sh`.
+
+## Preparación inicial
+
+Desde `back`:
+
+```bash
+if [ ! -f .venv/Scripts/python.exe ]; then
+  python -m venv .venv
+fi
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+if [ ! -f .env ]; then cp .env.example .env; fi
+```
+
+Completar `JWT_SECRET_KEY` en `.env` con el resultado de este comando,
+ejecutado una sola vez:
+
+```bash
+./.venv/Scripts/python.exe -c 'import secrets; print(secrets.token_hex(32))'
+```
+
+Configurar `DATABASE_URL` si se requiere otra base. Luego:
+
+```bash
+./.venv/Scripts/python.exe -m alembic upgrade head
+bash dev.sh
+```
+
+El `.env` real está ignorado por Git. `.env.example` es la plantilla sin
+secretos. API, migraciones y cargadores leen `app/config.py`; las variables
+del proceso prevalecen sobre `.env`. No se requiere `--env-file`.
+El script de arranque no crea usuarios, instala dependencias ni aplica migraciones.
+La carga optativa de conceptos de demostración se explica en
+[el contrato del catálogo](../docs/catalogo-patologias.md).
+
+## Pruebas
+
+```bash
+./.venv/Scripts/python.exe -m pytest -q
+```
+
+## Organización
+
+- `app/`: API, casos de uso, dominio e infraestructura.
+- `migrations/`: cambios versionados del esquema.
+- `tests/`: pruebas del backend.
+
+Entornos virtuales, archivos `.env`, bases locales y cachés no se versionan.

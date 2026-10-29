@@ -30,7 +30,7 @@ def create_use_case(role: UserRole) -> AutenticarUsuarioUseCase:
 
 
 def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-with-at-least-32-bytes")
     app.dependency_overrides[get_authenticate_user_use_case] = lambda: create_use_case(
         UserRole.PATIENT
     )
@@ -48,6 +48,7 @@ def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["rol"] == "Paciente"
+    assert response.json()["role"] == "patient"
     assert response.json()["redirect_to"] == "/paciente/dashboard"
     assert response.json()["token_type"] == "bearer"
     assert response.json()["access_token"]
@@ -56,7 +57,7 @@ def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
 def test_non_patient_login_does_not_redirect_to_patient_dashboard(
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-with-at-least-32-bytes")
     app.dependency_overrides[get_authenticate_user_use_case] = lambda: create_use_case(
         UserRole.TREATING_PHYSICIAN
     )
@@ -74,11 +75,12 @@ def test_non_patient_login_does_not_redirect_to_patient_dashboard(
 
     assert response.status_code == 200
     assert response.json()["rol"] == "Médico"
+    assert response.json()["role"] == "treating_physician"
     assert "redirect_to" not in response.json()
 
 
 def test_login_rejects_invalid_password(monkeypatch) -> None:
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-with-at-least-32-bytes")
     app.dependency_overrides[get_authenticate_user_use_case] = lambda: create_use_case(
         UserRole.PATIENT
     )

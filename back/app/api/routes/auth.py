@@ -23,6 +23,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     rol: str
+    role: UserRole
     redirect_to: str | None = None
 
 
@@ -53,5 +54,6 @@ def login(
     return LoginResponse(
         access_token=create_access_token(user),
         rol=user.role.display_name,
+        role=user.role,
         redirect_to=redirect_to,
     )
