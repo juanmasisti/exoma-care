@@ -66,3 +66,7 @@ Entornos virtuales, archivos `.env`, bases locales y cachés no se versionan.
 ## Pacientes e información clínica
 
 EC-07 requiere la migración `0003`. Desde `back`, ejecutar `./.venv/Scripts/python.exe -m alembic upgrade head` antes del arranque. El [contrato de pacientes](../docs/pacientes-clinica.md) describe permisos, endpoints y la carga opcional de cinco patologías DEMO.
+
+## Centros de extracción y feriados
+
+La logística requiere la migración `0004` (provincias, centros y feriados). La carga optativa y repetible de 24 provincias, 100 centros DEMO y los feriados fijos del año actual y el siguiente se corre con `./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers`. Criterios en la [decisión 005](../docs/decisiones/005-logistica-turnero.md).
