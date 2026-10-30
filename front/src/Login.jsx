@@ -70,9 +70,9 @@ function Login() {
 
     try {
       const user = await login(identifier, password)
-      const destination = ['medical_manager', 'treating_physician'].includes(user.role)
-        ? '/catalogo/patologias'
-        : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
+      const destination = user.role === 'treating_physician' ? '/medico/pacientes'
+        : user.role === 'medical_manager' ? '/catalogo/patologias'
+          : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
 
       navigate(destination)
     } catch (loginError) {

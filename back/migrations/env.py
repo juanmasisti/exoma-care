@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, pool
 
 from app.config import get_settings
 from app.infrastructure.database.session import Base
-from app.infrastructure.database import models, catalog_models  # noqa: F401
+from app.infrastructure.database import models, catalog_models, patient_clinical_models  # noqa: F401
 
 url = get_settings().database_url
 

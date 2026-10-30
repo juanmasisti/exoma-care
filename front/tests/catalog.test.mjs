@@ -18,7 +18,7 @@ before(async () => {
   globalThis.document = bootstrap.document
   createRoot = (await import('react-dom/client')).createRoot
   bootstrap.close()
-  server = await createServer({ server: { middlewareMode: true }, appType: 'custom' })
+  server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'custom' })
   Harness = (await server.ssrLoadModule('/tests/harness.jsx')).default
   api = (await server.ssrLoadModule('/src/services/api.js')).api
   setSession = (await server.ssrLoadModule('/src/services/session.js')).setSession

@@ -1,0 +1,160 @@
+{
+  "provenance": {
+    "source": "Prototipo AI Studio del médico tratante entregado por Juanma",
+    "purpose": "Demostración académica; asociaciones pendientes de validación clínica",
+    "code_system": "DEMO",
+    "pathology_names_source": "Entrevista corregida con el Product Owner"
+  },
+  "pathologies": [
+    {
+      "key": "fabry",
+      "name": "Enfermedad de Fabry",
+      "cardinal": {
+        "code": "DEMO-FABRY-C",
+        "label": "Acroparestesias en extremidades / Dolor neuropático acral"
+      },
+      "secondary": [
+        {
+          "code": "DEMO-FABRY-S1",
+          "label": "Angioqueratomas cutáneos en traje de baño"
+        },
+        {
+          "code": "DEMO-FABRY-S2",
+          "label": "Córnea verticillata bilateral sin afección visual"
+        },
+        {
+          "code": "DEMO-FABRY-S3",
+          "label": "Hipohidrosis / Anhidrosis con intolerancia al calor"
+        },
+        {
+          "code": "DEMO-FABRY-S4",
+          "label": "Proteinuria o deterioro renal inexplicable"
+        },
+        {
+          "code": "DEMO-FABRY-S5",
+          "label": "Hipertrofia ventricular izquierda concéntrica inexplicada"
+        }
+      ]
+    },
+    {
+      "key": "pompe",
+      "name": "Enfermedad de Pompe",
+      "cardinal": {
+        "code": "DEMO-POMPE-C",
+        "label": "Debilidad muscular progresiva en cintura escapular y pelviana con insuficiencia respiratoria diafragmática"
+      },
+      "secondary": [
+        {
+          "code": "DEMO-POMPE-S1",
+          "label": "Creatina quinasa (CPK) sérica persistentemente elevada"
+        },
+        {
+          "code": "DEMO-POMPE-S2",
+          "label": "Disnea en decúbito supino / ortopnea matinal no cardíaca"
+        },
+        {
+          "code": "DEMO-POMPE-S3",
+          "label": "Dificultad progresiva para subir escaleras o levantarse de una silla (signo de Gowers)"
+        },
+        {
+          "code": "DEMO-POMPE-S4",
+          "label": "Cardiomegalia / miocardiopatía hipertrófica en evaluación ecocardiográfica"
+        },
+        {
+          "code": "DEMO-POMPE-S5",
+          "label": "Hepatomegalia y macroglosia en examen clínico"
+        }
+      ]
+    },
+    {
+      "key": "mpsi",
+      "name": "Mucopolisacaridosis tipo I",
+      "cardinal": {
+        "code": "DEMO-MPSI-C",
+        "label": "Opacidad corneal difusa bilateral progresiva y disostosis múltiple en radiografías"
+      },
+      "secondary": [
+        {
+          "code": "DEMO-MPSI-S1",
+          "label": "Facies tosca o rasgos faciales distintivos progresivos"
+        },
+        {
+          "code": "DEMO-MPSI-S2",
+          "label": "Hepatoesplenomegalia no dolorosa en ecografía abdominal"
+        },
+        {
+          "code": "DEMO-MPSI-S3",
+          "label": "Rigidez articular progresiva y contracturas en flexión sin inflamación"
+        },
+        {
+          "code": "DEMO-MPSI-S4",
+          "label": "Cifoescoliosis lumbar o giba toracolumbar precoz"
+        },
+        {
+          "code": "DEMO-MPSI-S5",
+          "label": "Hipoacusia mixta e infecciones respiratorias altas recurrentes"
+        }
+      ]
+    },
+    {
+      "key": "gaucher",
+      "name": "Enfermedad de Gaucher",
+      "cardinal": {
+        "code": "DEMO-GAUCHER-C",
+        "label": "Esplenomegalia masiva no asociada a hipertensión portal y trombocitopenia inexplicable"
+      },
+      "secondary": [
+        {
+          "code": "DEMO-GAUCHER-S1",
+          "label": "Crisis de dolor óseo agudo o dolores óseos osteoarticulares crónicos"
+        },
+        {
+          "code": "DEMO-GAUCHER-S2",
+          "label": "Deformidad ósea radiológica en matraz de Erlenmeyer en fémur distal"
+        },
+        {
+          "code": "DEMO-GAUCHER-S3",
+          "label": "Anemia normocítica crónica resistente a suplementación con hierro"
+        },
+        {
+          "code": "DEMO-GAUCHER-S4",
+          "label": "Hepatomegalia moderada indolora"
+        },
+        {
+          "code": "DEMO-GAUCHER-S5",
+          "label": "Tendencia a equimosis espontáneas o sangrado mucocutáneo fácil"
+        }
+      ]
+    },
+    {
+      "key": "asmd",
+      "name": "ASMD",
+      "cardinal": {
+        "code": "DEMO-ASMD-C",
+        "label": "Hepatoesplenomegalia progresiva con infiltración intersticial pulmonar reticular en vidrio esmerilado"
+      },
+      "secondary": [
+        {
+          "code": "DEMO-ASMD-S1",
+          "label": "Mancha rojo cereza macular en examen de fondo de ojo"
+        },
+        {
+          "code": "DEMO-ASMD-S2",
+          "label": "Trombocitopenia moderada a severa con esplenomegalia palpable"
+        },
+        {
+          "code": "DEMO-ASMD-S3",
+          "label": "Perfil lipídico marcadamente aterogénico con HDL marcadamente disminuido"
+        },
+        {
+          "code": "DEMO-ASMD-S4",
+          "label": "Deterioro restrictivo con alteración de la difusión de monóxido de carbono (DLCO)"
+        },
+        {
+          "code": "DEMO-ASMD-S5",
+          "label": "Retraso pondoestatural o fallo de medro en la infancia"
+        }
+      ]
+    }
+  ]
+}
