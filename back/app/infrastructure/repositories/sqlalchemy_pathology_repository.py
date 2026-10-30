@@ -54,6 +54,10 @@ class SQLAlchemyPathologyRepository:
             statement.order_by(SymptomModel.label).limit(100)
         )]
 
+    def get_symptoms(self, ids: set[int]) -> list[Symptom]:
+        return [symptom_record(s) for s in self.session.scalars(
+            select(SymptomModel).where(SymptomModel.id.in_(ids)).order_by(SymptomModel.id))]
+
     def symptom_ids_exist(self, ids: set[int]) -> bool:
         if not ids:
             return True
