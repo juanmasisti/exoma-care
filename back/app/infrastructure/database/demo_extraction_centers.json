@@ -1,0 +1,34 @@
+{
+  "provenance": {
+    "source": "24 jurisdicciones argentinas con su capital y coordenadas aproximadas",
+    "purpose": "Demostración académica; centros, direcciones, teléfonos y reparto por provincia son ficticios (DEMO)",
+    "total_centers": 100,
+    "offset": "Signo de latitud y longitud hacia donde se corren los centros desde la capital, elegido para alejarse del agua"
+  },
+  "provinces": [
+    {"name": "Buenos Aires", "capital": "La Plata", "latitude": -34.921, "longitude": -57.955, "offset": [-1, -1], "centers": 20},
+    {"name": "Ciudad Autónoma de Buenos Aires", "capital": "Ciudad de Buenos Aires", "latitude": -34.604, "longitude": -58.382, "offset": [-1, -1], "centers": 10},
+    {"name": "Córdoba", "capital": "Córdoba", "latitude": -31.420, "longitude": -64.188, "offset": [-1, -1], "centers": 8},
+    {"name": "Santa Fe", "capital": "Santa Fe", "latitude": -31.633, "longitude": -60.700, "offset": [1, -1], "centers": 8},
+    {"name": "Mendoza", "capital": "Mendoza", "latitude": -32.890, "longitude": -68.845, "offset": [-1, -1], "centers": 5},
+    {"name": "Tucumán", "capital": "San Miguel de Tucumán", "latitude": -26.808, "longitude": -65.217, "offset": [-1, -1], "centers": 4},
+    {"name": "Entre Ríos", "capital": "Paraná", "latitude": -31.732, "longitude": -60.529, "offset": [-1, 1], "centers": 3},
+    {"name": "Salta", "capital": "Salta", "latitude": -24.782, "longitude": -65.423, "offset": [-1, -1], "centers": 3},
+    {"name": "Misiones", "capital": "Posadas", "latitude": -27.367, "longitude": -55.896, "offset": [-1, -1], "centers": 3},
+    {"name": "Chaco", "capital": "Resistencia", "latitude": -27.451, "longitude": -58.987, "offset": [-1, -1], "centers": 3},
+    {"name": "Corrientes", "capital": "Corrientes", "latitude": -27.469, "longitude": -58.830, "offset": [-1, 1], "centers": 3},
+    {"name": "Santiago del Estero", "capital": "Santiago del Estero", "latitude": -27.784, "longitude": -64.264, "offset": [-1, -1], "centers": 3},
+    {"name": "San Juan", "capital": "San Juan", "latitude": -31.537, "longitude": -68.536, "offset": [-1, -1], "centers": 3},
+    {"name": "Jujuy", "capital": "San Salvador de Jujuy", "latitude": -24.186, "longitude": -65.299, "offset": [-1, -1], "centers": 3},
+    {"name": "Río Negro", "capital": "Viedma", "latitude": -40.813, "longitude": -62.996, "offset": [1, -1], "centers": 3},
+    {"name": "Neuquén", "capital": "Neuquén", "latitude": -38.952, "longitude": -68.059, "offset": [1, 1], "centers": 2},
+    {"name": "Formosa", "capital": "Formosa", "latitude": -26.185, "longitude": -58.173, "offset": [-1, -1], "centers": 2},
+    {"name": "Catamarca", "capital": "San Fernando del Valle de Catamarca", "latitude": -28.469, "longitude": -65.779, "offset": [-1, -1], "centers": 2},
+    {"name": "La Rioja", "capital": "La Rioja", "latitude": -29.413, "longitude": -66.856, "offset": [-1, -1], "centers": 2},
+    {"name": "San Luis", "capital": "San Luis", "latitude": -33.301, "longitude": -66.338, "offset": [-1, -1], "centers": 2},
+    {"name": "La Pampa", "capital": "Santa Rosa", "latitude": -36.620, "longitude": -64.290, "offset": [-1, 1], "centers": 2},
+    {"name": "Chubut", "capital": "Rawson", "latitude": -43.300, "longitude": -65.102, "offset": [1, -1], "centers": 2},
+    {"name": "Santa Cruz", "capital": "Río Gallegos", "latitude": -51.623, "longitude": -69.216, "offset": [-1, -1], "centers": 2},
+    {"name": "Tierra del Fuego", "capital": "Ushuaia", "latitude": -54.801, "longitude": -68.303, "offset": [1, 1], "centers": 2}
+  ]
+}
