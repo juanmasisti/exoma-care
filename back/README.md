@@ -62,3 +62,7 @@ La carga optativa de conceptos de demostración se explica en
 - `tests/`: pruebas del backend.
 
 Entornos virtuales, archivos `.env`, bases locales y cachés no se versionan.
+
+## Pacientes e información clínica
+
+EC-07 requiere la migración `0003`. Desde `back`, ejecutar `./.venv/Scripts/python.exe -m alembic upgrade head` antes del arranque. El [contrato de pacientes](../docs/pacientes-clinica.md) describe permisos, endpoints y la carga opcional de cinco patologías DEMO.

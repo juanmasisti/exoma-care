@@ -44,3 +44,7 @@ los de Camila. La navegación se integrará cuando esos módulos estén disponib
 
 El análisis detallado del ZIP y las notas para la defensa permanecen fuera
 del repositorio. Esta decisión conserva solo el alcance compartido del equipo.
+
+## Actualización EC-07 (2026-10-29)
+
+Las decisiones funcionales pendientes se resolvieron en la [decisión 004](004-pacientes-clinica.md). El portal del médico agrega pacientes y mantiene acceso al catálogo. Se admiten datos del prototipo como demostración explícita con códigos DEMO, según autorización de Juanma; no como terminología médica validada.
