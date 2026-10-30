@@ -45,12 +45,31 @@ Fecha: 2026-10-30. Migración `0004`.
   ni borra nada: conserva un centro desactivado y un feriado con otra descripción.
 - Si otra rama también usa la migración `0004`, se resuelve con `alembic merge` al integrar.
 
-## T00c: API de centros y horarios libres (pendiente)
+## T00c: API de centros y horarios libres
 
-A completar en T00c: endpoints, permisos y cómo se combinan los feriados de la tabla con
-las reglas de T00a.
+Fecha: 2026-10-30. Sin migración nueva. Contrato en [logistica.md](../logistica.md).
+
+- `GET /api/provinces`, `GET /api/extraction-centers` y
+  `GET /api/extraction-centers/{id}/slots`. Son solo de consulta y los usa la pantalla del
+  paciente para elegir centro y horario.
+- **Permisos:** solo el rol `patient`. Los demás roles se suman cuando una tarea los
+  necesite. Todavía no se exige que el paciente tenga un estudio habilitado: eso llega con
+  la reserva y el vínculo usuario → paciente.
+- **Feriados:** salen solo de la tabla `holidays`. No se vuelven a calcular con
+  `fixed_national_holidays`. Un feriado que no esté cargado no se bloquea, por eso el seed
+  se vuelve a correr cada año. La respuesta trae la descripción del feriado.
+- **Hora actual:** la API la obtiene con la dependencia `get_clock`, en la zona de
+  Buenos Aires, y las pruebas la reemplazan. Los turnos que ya empezaron no se ofrecen.
+- **Búsqueda:** `q` busca en el nombre y la ciudad del centro, no en la dirección (en los
+  datos DEMO todas son "Calle DEMO n"). En SQLite, `lower()` solo pasa a minúscula las
+  letras ASCII, igual que en pacientes. Con centros reales, un nombre que empiece con Á o Ñ
+  no aparecería al buscarlo en minúscula. Con los datos DEMO no pasa.
+- Las provincias sin centros activos se listan igual, con `active_centers` en 0.
+- Todavía no se descuentan los turnos reservados: las reservas llegan en T02.
 
 ## Pendiente
 
 - Quién carga cada año los feriados trasladables, los puentes y los feriados fijos de los
   años siguientes (hoy: volver a correr el seed y cargar el resto a mano).
+- Con cuánta anticipación máxima se puede pedir turno. Las fuentes no lo indican, así que
+  no hay límite. Hay que preguntarle al PO.
