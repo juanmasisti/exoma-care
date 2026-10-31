@@ -37,3 +37,7 @@ En otra terminal, desde `front`: `npm install` la primera vez y `npm run dev` pa
 Backend: `./.venv/Scripts/python.exe -m pytest -q` desde `back`.
 Frontend: `npm test`, `npm run lint` y `npm run build` desde `front`.
 Los tests usan datos ficticios y bases temporales; no requieren cargar pacientes en la base local.
+
+## Ampliación EC-08
+
+La familia opcional tiene versión e historial independientes. Ver [información familiar](informacion-familiar.md). La revisión actual del esquema pasa a `0004`; `0003` documenta el punto de partida de EC-07.
