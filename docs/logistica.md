@@ -29,6 +29,14 @@ Errores:
 - 404: centro inexistente o inactivo.
 - 422: `date` ausente o inválida (enviarla como AAAA-MM-DD), o `q` de más de 100 caracteres.
 
+## Pantalla del paciente
+
+`/paciente/turnos/reservar` (solo rol `patient`; código en
+`front/src/features/logistica/turnos/`). El paciente elige provincia, centro (en las
+tarjetas o en el mapa de OpenStreetMap), día y horario libre, y ve su selección. Usa los
+tres endpoints de arriba. "Confirmar turno" queda deshabilitado hasta que exista la reserva.
+Detalles en la [decisión 005](decisiones/005-logistica-turnero.md#t01-pantalla-del-paciente-para-elegir-centro-y-horario).
+
 ## Preparar y ejecutar (Git Bash)
 
 Desde `back`:
@@ -47,3 +55,6 @@ volver a correrlo. Los feriados trasladables y los puentes se cargan a mano en `
 
 `./.venv/Scripts/python.exe -m pytest -q` desde `back`. Las pruebas de la API están en
 `tests/test_extraction_centers_api.py` y fijan la hora actual reemplazando `get_clock`.
+
+Pantalla: `npm test` y `npm run lint` desde `front` (Node `^20.19.0` o `>=22.12.0`). Las
+pruebas están en `front/tests/turnos.test.mjs` y fijan la fecha con `mock.timers`.
