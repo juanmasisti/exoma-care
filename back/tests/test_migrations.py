@@ -9,7 +9,7 @@ from alembic.autogenerate import compare_metadata
 from sqlalchemy import create_engine, inspect, text
 
 from app.infrastructure.database.session import Base
-from app.infrastructure.database import models, catalog_models, patient_clinical_models  # noqa: F401
+from app.infrastructure.database import models, catalog_models, patient_clinical_models, logistics_models  # noqa: F401
 
 
 def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
@@ -29,9 +29,11 @@ def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
         context = MigrationContext.configure(connection)
         assert compare_metadata(context, Base.metadata) == []
     command.downgrade(config, "0001")
-    assert "symptoms" not in inspect(engine).get_table_names()
+    assert {"symptoms", "extraction_centers"}.isdisjoint(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM users")) == 1
+    command.upgrade(config, "head")
+    assert "extraction_centers" in inspect(engine).get_table_names()
     engine.dispose()
 
 
