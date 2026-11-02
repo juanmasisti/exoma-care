@@ -24,9 +24,9 @@ Todos los médicos tratantes pueden consultar y modificar familiares de todos lo
 
 ## Persistencia y operación
 
-Migración `0004`: patient_family_records, family_members, family_member_symptoms, family_member_diagnoses y patient_family_revisions. No modifica la clínica existente ni siembra familiares. La API no aplica migraciones al arrancar.
+Migración `0005`: patient_family_records, family_members, family_member_symptoms, family_member_diagnoses y patient_family_revisions. No modifica la clínica existente ni siembra familiares. La API no aplica migraciones al arrancar.
 
-Antes de actualizar una base a conservar, respaldarla. Revertir 0004 elimina toda la información familiar y sus revisiones; no usar downgrade como forma de vaciar una ficha ni para resolver una incidencia de arranque.
+Antes de actualizar una base a conservar, respaldarla. Revertir 0005 elimina toda la información familiar y sus revisiones; no usar downgrade como forma de vaciar una ficha ni para resolver una incidencia de arranque.
 
 ## Pendientes expresos
 

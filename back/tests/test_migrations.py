@@ -9,7 +9,7 @@ from alembic.autogenerate import compare_metadata
 from sqlalchemy import create_engine, inspect, text
 
 from app.infrastructure.database.session import Base
-from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models  # noqa: F401
+from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models, logistics_models  # noqa: F401
 
 
 def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
@@ -29,9 +29,11 @@ def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
         context = MigrationContext.configure(connection)
         assert compare_metadata(context, Base.metadata) == []
     command.downgrade(config, "0001")
-    assert "symptoms" not in inspect(engine).get_table_names()
+    assert {"symptoms", "extraction_centers"}.isdisjoint(inspect(engine).get_table_names())
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM users")) == 1
+    command.upgrade(config, "head")
+    assert {"extraction_centers", "patient_family_records"}.issubset(inspect(engine).get_table_names())
     engine.dispose()
 
 
@@ -91,3 +93,12 @@ def test_family_migration_keeps_existing_clinical_evidence_and_pending_account(t
         assert connection.scalar(text("SELECT count(*) FROM patient_clinical_revisions"))==1
         assert connection.scalar(text("SELECT count(*) FROM patients"))==1
     engine.dispose()
+
+
+def test_migration_history_has_one_unique_head_after_logistics_and_family_integration():
+    from alembic.script import ScriptDirectory
+    config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
+    scripts=ScriptDirectory.from_config(config)
+    assert scripts.get_heads()==["0005"]
+    assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
+    assert scripts.get_revision("0005").down_revision=="0004"
