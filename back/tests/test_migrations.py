@@ -9,7 +9,7 @@ from alembic.autogenerate import compare_metadata
 from sqlalchemy import create_engine, inspect, text
 
 from app.infrastructure.database.session import Base
-from app.infrastructure.database import models, catalog_models, patient_clinical_models, logistics_models  # noqa: F401
+from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models, logistics_models  # noqa: F401
 
 
 def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
@@ -33,7 +33,7 @@ def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM users")) == 1
     command.upgrade(config, "head")
-    assert "extraction_centers" in inspect(engine).get_table_names()
+    assert {"extraction_centers", "patient_family_records"}.issubset(inspect(engine).get_table_names())
     engine.dispose()
 
 
@@ -50,7 +50,7 @@ def test_clinical_migration_preserves_legacy_patient_and_blocks_unsafe_downgrade
                     'legacy@example.test', 'not-a-real-password')"""))
         connection.execute(text("""INSERT INTO patients
             (id, dni, nombre, apellido, usuario_id) VALUES (1, '45000111', 'Ana', 'Prueba', 1)"""))
-    command.upgrade(config, "head")
+    command.upgrade(config, "0003")
     with engine.begin() as connection:
         legacy = connection.execute(text("SELECT dni, usuario_id, version, clinical_summary FROM patients WHERE id=1")).one()
         assert tuple(legacy) == ('45000111', 1, 1, None)
@@ -63,3 +63,42 @@ def test_clinical_migration_preserves_legacy_patient_and_blocks_unsafe_downgrade
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003"
         assert "patient_clinical_revisions" in inspect(connection).get_table_names()
     engine.dispose()
+
+
+def test_family_migration_keeps_existing_clinical_evidence_and_pending_account(tmp_path, monkeypatch):
+    import json
+    database=tmp_path / "family-migration.db"
+    monkeypatch.setenv("DATABASE_URL",f"sqlite:///{database}")
+    config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
+    command.upgrade(config,"0003")
+    engine=create_engine(f"sqlite:///{database}")
+    with engine.begin() as connection:
+        connection.execute(text("""INSERT INTO users
+            (id,username,role,first_name,last_name,phone,email,password_hash)
+            VALUES (1,'doctor','treating_physician','Demo','Prueba','000','demo@example.test','not-a-password')"""))
+        connection.execute(text("""INSERT INTO patients
+            (id,dni,nombre,apellido,usuario_id,clinical_summary,version)
+            VALUES (1,'45000111','Ana','Prueba',NULL,'Texto clínico previo',2)"""))
+        connection.execute(text("""INSERT INTO patient_clinical_revisions
+            (patient_id,version,changed_by_physician_id,changed_at,snapshot)
+            VALUES (1,2,1,'2026-10-31 12:00:00',:snapshot)"""),{"snapshot":json.dumps({"previous":"evidence"})})
+    command.upgrade(config,"head")
+    with engine.connect() as connection:
+        assert tuple(connection.execute(text("SELECT usuario_id,clinical_summary,version FROM patients WHERE id=1")).one())==(None,'Texto clínico previo',2)
+        assert json.loads(connection.scalar(text("SELECT snapshot FROM patient_clinical_revisions")))=={"previous":"evidence"}
+        assert connection.scalar(text("SELECT count(*) FROM patient_family_records"))==0
+        assert compare_metadata(MigrationContext.configure(connection),Base.metadata)==[]
+    command.downgrade(config,"0003")
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM patient_clinical_revisions"))==1
+        assert connection.scalar(text("SELECT count(*) FROM patients"))==1
+    engine.dispose()
+
+
+def test_migration_history_has_one_unique_head_after_logistics_and_family_integration():
+    from alembic.script import ScriptDirectory
+    config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
+    scripts=ScriptDirectory.from_config(config)
+    assert scripts.get_heads()==["0005"]
+    assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
+    assert scripts.get_revision("0005").down_revision=="0004"

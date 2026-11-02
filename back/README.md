@@ -70,3 +70,9 @@ EC-07 requiere la migración `0003`. Desde `back`, ejecutar `./.venv/Scripts/pyt
 ## Centros de extracción y feriados
 
 La logística requiere la migración `0004` (provincias, centros y feriados). La carga optativa y repetible de 24 provincias, 100 centros DEMO y los feriados fijos del año actual y el siguiente se corre con `./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers`. Criterios en la [decisión 005](../docs/decisiones/005-logistica-turnero.md).
+
+## Información familiar
+
+EC-08 agrega la migración `0005`, posterior a `0004` de logística, y la pestaña Familiares de la ficha médica. Aplicar `alembic upgrade head` desde el entorno del backend antes de iniciar. Ver [contrato familiar](../docs/informacion-familiar.md); la integración del PDF de familiograma continúa pendiente.
+
+Si ya usaste la antigua `0004` de la rama familiar, seguí la [reconciliación explícita](../docs/informacion-familiar.md#reconciliar-una-base-local-de-la-antigua-0004-familiar) antes del upgrade normal. No basta con cambiar el nombre de una revisión ni usar stamp.

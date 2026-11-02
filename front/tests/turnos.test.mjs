@@ -273,3 +273,14 @@ test('sin sesión la ruta vuelve al login',async()=>{
   assert.equal(container.querySelector('a[href="/paciente/turnos/reservar"]'),null)
   assert.notEqual(container.querySelector('h1')?.textContent,'Reservá tu turno de extracción')
 })
+
+
+test('volver a elegir el mismo día recarga horarios sin quedar en carga permanente',async()=>{
+  await pickCenter();await pickDay('2026-11-04')
+  const firstRequests=calls.filter(c=>c.url.endsWith('/slots')).length
+  assert.equal(container.querySelectorAll('button.turnos-slot').length,2)
+  await pickDay('2026-11-04')
+  assert.equal(container.querySelectorAll('button.turnos-slot').length,2)
+  assert.equal(calls.filter(c=>c.url.endsWith('/slots')).length,firstRequests+1)
+  assert.doesNotMatch(container.textContent,/Cargando horarios/)
+})

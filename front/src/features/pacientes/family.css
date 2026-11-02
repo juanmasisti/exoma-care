@@ -1,0 +1,21 @@
+.family-section[hidden] { display: none; }
+.family-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 18px; }
+.family-heading .patient-section-heading { padding-bottom: 0; border: 0; margin: 0; }
+.family-heading > button { flex-shrink: 0; }
+.family-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
+.family-members { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 16px 0; }
+.family-member { padding: 16px; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; overflow-wrap: anywhere; }
+.family-member-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+.family-diagnosis { font-size: 12px; line-height: 1.8; color: #475569; margin: 14px 0 8px; }
+.family-diagnosis strong { font-weight: 650; }
+.family-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.patients-page .family-remove { color: #9f1239; border-color: #fecdd3; }
+.family-editor { margin: 20px 0; padding: 22px; border: 1px solid #c7d2fe; border-radius: 10px; background: #fafaff; }
+.family-editor h3 { margin-top: 0; }
+.family-empty { text-align: center; padding: 24px 16px; color: #64748b; }
+.family-empty svg { color: #a5b4fc; }
+.family-history { margin-top: 25px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+.family-history .family-member { margin-top: 12px; }
+.family-conflict { padding: 18px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 9px; margin-top: 18px; font-size: 12px; line-height: 1.8; }
+@media (max-width: 900px) { .family-members { grid-template-columns: 1fr; } .family-heading { flex-direction: column; } }
+@media (max-width: 650px) { .family-editor { padding: 16px; } .family-actions { justify-content: flex-start; } }
