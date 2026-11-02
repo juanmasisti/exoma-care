@@ -67,9 +67,57 @@ Fecha: 2026-10-30. Sin migración nueva. Contrato en [logistica.md](../logistica
 - Las provincias sin centros activos se listan igual, con `active_centers` en 0.
 - Todavía no se descuentan los turnos reservados: las reservas llegan en T02.
 
+## T01: pantalla del paciente para elegir centro y horario
+
+Fecha: 2026-11-01. Solo front. Ruta `/paciente/turnos/reservar`, únicamente para el rol
+`patient`. Médico y gerente vuelven a su inicio; sin sesión se vuelve al login.
+
+- **Mapa:** se agregó `leaflet` 1.9.4, sin `react-leaflet` (para un mapa con marcadores no
+  hace falta). Se carga con `import()` dentro del efecto, así queda en un archivo aparte y no
+  se descarga hasta que hay centros que mostrar. Al desmontar se llama a `map.remove()`, y si
+  la carga termina después de desmontar no se crea el mapa (en desarrollo, `StrictMode` monta
+  los efectos dos veces). Se usan `circleMarker` para evitar los íconos de imagen, que Vite
+  no resuelve sin configuración extra. Si Leaflet no carga, queda la lista.
+- **Mosaicos:** OpenStreetMap (`tile.openstreetmap.org`) con su atribución. Su política de
+  uso alcanza para un uso académico de poco tráfico; en producción habría que usar un
+  proveedor de mosaicos propio o contratado.
+- Descartados: `iframe` de OpenStreetMap (un solo marcador, no se puede elegir desde el
+  mapa), MapLibre (mucho más pesado) y Google Maps (pide clave y facturación; el repo es
+  público).
+- **Centros:** se ordenan en el front con orden natural ("Centro 2" antes que "Centro 10").
+  Se paginan en el front porque llegan todos en un pedido: 8 por página por defecto, 12 o
+  todos. La paginación copia la forma de la de `PatientsList` y usa sus clases de
+  `patients.css`, sin modificarlas. Elegir en el mapa un centro de otra página salta a esa
+  página. Las tarjetas son `<button aria-pressed>` para poder elegir con teclado; el mapa
+  no se maneja con teclado.
+- **Calendario:** sábados, domingos y días anteriores a hoy deshabilitados. La fecha que se
+  pide al back se arma con año, mes y día del calendario, no con `toISOString()` (que pasa a
+  UTC y después de las 21 da el día siguiente). Los feriados se informan recién al elegir el
+  día ("Feriado: …"), porque no hay un endpoint que liste los feriados de un mes.
+  "Hoy" sale del reloj y la zona del equipo del paciente, y se actualiza al elegir centro o
+  día. Si el equipo tiene otra zona o la hora mal, el back manda igual: un día pasado
+  devuelve la lista vacía y se ve "No hay turnos libres".
+- **Horarios:** la hora se lee del ISO que devuelve el back, que ya viene en hora de
+  Argentina, así no depende de la zona del navegador.
+- **Confirmar turno:** deshabilitado con la leyenda "Disponible cuando se habilite la
+  reserva" hasta T02 (falta la tabla `studies`).
+- **`ClinicalLayout`:** se agregó la rama del rol `patient` (rótulo "Paciente", ítem
+  "Reservar turno", textos del menú, avatar, perfil y miga de pan, y sin el enlace al
+  catálogo). El cambio es solo aditivo: para médico y gerente no cambia nada. **Avisarle a
+  Juanma en el PR**, porque el componente es compartido. `/portal` muestra al paciente un
+  enlace a la reserva.
+- Fuera de alcance: el stepper de los pasos del portal y "Volver a forma de pago" (todavía
+  no existen los pasos 1 y 2 ni el estudio), y ayuno, horarios por centro, estacionamiento
+  y distancias del prototipo.
+- **Entorno:** el front necesita Node `^20.19.0` o `>=22.12.0`, lo que pide Vite 8. Con
+  Node 20.14, npm no instala los binarios de rolldown y oxlint, y `npm test` no expande
+  `tests/*.test.mjs`.
+
 ## Pendiente
 
 - Quién carga cada año los feriados trasladables, los puentes y los feriados fijos de los
   años siguientes (hoy: volver a correr el seed y cargar el resto a mano).
 - Con cuánta anticipación máxima se puede pedir turno. Las fuentes no lo indican, así que
   no hay límite. Hay que preguntarle al PO.
+- Si el calendario tiene que mostrar los feriados deshabilitados antes de elegir el día:
+  haría falta un endpoint de feriados por mes.
