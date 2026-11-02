@@ -59,7 +59,11 @@ export default function ReservarTurno({ session }) {
     return () => { active = false }
   }, [centerId, day, slotsRetry])
 
-  function chooseDay(key) { setToday(new Date()); setDay(key); setSlots(null); setSlotsError(''); setSlot(null) }
+  function chooseDay(key) {
+    setToday(new Date()); setDay(key); setSlots(null); setSlotsError(''); setSlot(null)
+    // La misma fecha no cambia las dependencias del efecto: pedir recarga explícita.
+    if (key && key === day) setSlotsRetry((n) => n + 1)
+  }
   function chooseCenter(id) { setCenterId(id); chooseDay(null) }
   function chooseProvince(id) { setProvinceId(id); setCenters(null); setCentersError(''); setPage(0); chooseCenter(null) }
   function chooseFromMap(id) {
