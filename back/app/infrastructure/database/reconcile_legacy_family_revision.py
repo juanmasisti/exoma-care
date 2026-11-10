@@ -21,11 +21,22 @@ from app.infrastructure.database import models, catalog_models, patient_clinical
 
 LOGISTICS_TABLES = {"provinces", "extraction_centers", "holidays"}
 FAMILY_TABLES = {"patient_family_records", "family_members", "family_member_symptoms", "family_member_diagnoses", "patient_family_revisions"}
+# Migraciones posteriores a 0005: esta herramienta solo llega a 0005; lo que sigue es alembic upgrade.
+REVISIONS_AFTER_0005 = {"0006"}
+TABLES_AFTER_0005 = {"studies"}
 
 
 def _require_schema(connection, metadata):
     if compare_metadata(MigrationContext.configure(connection, opts={"compare_server_default": True}), metadata):
         raise ValueError("El esquema no coincide exactamente con el esperado. No se modifica la base; revisar antes de continuar.")
+
+
+def _metadata_without(excluded):
+    metadata = MetaData()
+    for table in Base.metadata.sorted_tables:
+        if table.name not in excluded:
+            table.to_metadata(metadata)
+    return metadata
 
 
 def _legacy_state(connection: Connection) -> bool:
@@ -36,15 +47,13 @@ def _legacy_state(connection: Connection) -> bool:
         raise ValueError("El esquema no tiene revisión Alembic; no se modifica.")
     revisions = connection.scalars(text("SELECT version_num FROM alembic_version")).all()
     if revisions == ["0005"]:
-        _require_schema(connection, Base.metadata)
+        _require_schema(connection, _metadata_without(TABLES_AFTER_0005))
+        return False
+    if len(revisions) == 1 and revisions[0] in REVISIONS_AFTER_0005:
         return False
     if revisions != ["0004"] or not FAMILY_TABLES.issubset(tables) or LOGISTICS_TABLES & tables:
         raise ValueError("El esquema no corresponde a la antigua 0004 familiar. Para una 0004 normal de logística usar alembic upgrade head.")
-    legacy = MetaData()
-    for table in Base.metadata.sorted_tables:
-        if table.name not in LOGISTICS_TABLES:
-            table.to_metadata(legacy)
-    _require_schema(connection, legacy)
+    _require_schema(connection, _metadata_without(LOGISTICS_TABLES | TABLES_AFTER_0005))
     return True
 
 
@@ -63,7 +72,7 @@ def reconcile_legacy_family_revision(connection: Connection) -> bool:
         return False
     with Operations.context(MigrationContext.configure(connection)):
         logistics_upgrade()
-    _require_schema(connection, Base.metadata)
+    _require_schema(connection, _metadata_without(TABLES_AFTER_0005))
     if connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall():
         raise ValueError("El esquema tiene referencias inválidas; se revierte la reconciliación.")
     if connection.exec_driver_sql("PRAGMA integrity_check").scalar() != "ok":
@@ -89,7 +98,7 @@ def main():
         with engine.connect() as connection:
             needed = _legacy_state(connection)
         if not needed:
-            print("La base ya tiene el esquema integrado 0005. No se modificó.")
+            print("La base ya tiene el esquema integrado 0005 o posterior. No se modificó.")
             return
         if not args.apply:
             print("Detectada antigua 0004 familiar. Inspección sin cambios. Para reconciliar usar --apply --backup RUTA_NUEVA.")
