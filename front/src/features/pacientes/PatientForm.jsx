@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, FileText, Info, Save, User } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, FileText, Save, User } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import ClinicalLayout from '../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../services/api.js'
@@ -7,12 +7,19 @@ import { listPathologies } from '../patologias/api.js'
 import SymptomPicker from '../patologias/SymptomPicker.jsx'
 import { evaluatePatient, getPatient, savePatient } from './api.js'
 import ValidationResults from './ValidationResults.jsx'
+import ClinicalDictation from './ClinicalDictation.jsx'
 import './patients.css'
 
 const blank = () => ({ dni: '', first_name: '', last_name: '', birth_date: '', phone: '', email: '', clinical_summary: '', suspicion_type: 'clinical', family_history: '', pathology_ids: [], symptoms: [] })
 const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 export default function PatientForm({ session }) {
+  const { patientId } = useParams()
+  // A different patient owns a different form, pending request and microphone session.
+  return <PatientFormContent key={patientId ?? 'new'} session={session} />
+}
+
+function PatientFormContent({ session }) {
   const { patientId } = useParams()
   const navigate = useNavigate()
   const [form, setForm] = useState(blank)
@@ -22,6 +29,7 @@ export default function PatientForm({ session }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [evaluation, setEvaluation] = useState(null)
+  const [dictationPending, setDictationPending] = useState(false)
   const alive = useRef(true)
 
   useEffect(() => {
@@ -46,6 +54,7 @@ export default function PatientForm({ session }) {
 
   async function submit(event) {
     event.preventDefault()
+    if (dictationPending) { setError('Añadí o descartá el borrador de dictado antes de validar o guardar.'); return }
     if (!form.pathology_ids.length) { setError('Seleccioná al menos una patología sospechada.'); return }
     const action = event.nativeEvent.submitter?.value ?? 'save'
     setBusy(true); setError(''); setEvaluation(null)
@@ -69,7 +78,6 @@ export default function PatientForm({ session }) {
   return <ClinicalLayout session={session} pageLabel={heading}><section className="patients-page patient-form-page">
     <button type="button" className="patient-back" disabled={busy} onClick={() => navigate(patientId ? `/medico/pacientes/${patientId}` : '/medico/pacientes')}><ArrowLeft size={15} aria-hidden="true" />Volver</button>
     <header className="patients-header"><div><span className="patients-eyebrow">INFORMACIÓN CLÍNICA</span><h1>{heading}</h1><p>Registrá los datos personales y validá las sospechas antes de guardar. Esta operación no genera un estudio.</p></div></header>
-    <aside className="patient-demo-note"><Info size={17} aria-hidden="true" /><span>Datos de demostración: las asociaciones de síntomas de las cinco patologías provienen del prototipo y usan códigos DEMO, no SNOMED.</span></aside>
     {error && <div role="alert" className="patient-error">{error}</div>}
     {loading ? <p role="status">Cargando formulario...</p> : <form onSubmit={submit}><fieldset disabled={busy} className="patient-form-fieldset">
       <section className="patient-card"><div className="patient-section-heading"><User size={20} aria-hidden="true" /><h2>1. Información personal y de contacto</h2></div>
@@ -80,6 +88,7 @@ export default function PatientForm({ session }) {
       <section className="patient-card"><div className="patient-section-heading"><FileText size={20} aria-hidden="true" /><h2>2. Sospecha médica e historia clínica</h2></div>
         <label htmlFor="patient-suspicion">Tipo de sospecha <span aria-hidden="true">*</span></label><select id="patient-suspicion" value={form.suspicion_type} onChange={(event) => change('suspicion_type', event.target.value)}><option value="clinical">Clínica</option><option value="family">Familiar</option></select>
         <div className="patient-field-space"><label htmlFor="patient-summary">Resumen de historia clínica <span aria-hidden="true">*</span></label><textarea id="patient-summary" rows={5} value={form.clinical_summary} maxLength={20000} required onChange={(event) => change('clinical_summary', event.target.value)} /></div>
+        <ClinicalDictation key={patientId ?? 'new'} summary={form.clinical_summary} onApply={(value) => change('clinical_summary', value)} onPendingChange={setDictationPending} disabled={busy} />
         {form.suspicion_type === 'family' && <div className="patient-field-space"><label htmlFor="patient-family">Antecedente familiar documentado <span aria-hidden="true">*</span></label><textarea id="patient-family" rows={3} maxLength={10000} value={form.family_history} required onChange={(event) => change('family_history', event.target.value)} /><p className="patient-help">Documentá el antecedente que respalda la sospecha. En este caso no se exige que el paciente presente síntomas.</p></div>}
         <fieldset className="patient-pathology-fieldset"><legend>Patologías sospechadas <span aria-hidden="true">*</span></legend><p className="patient-help">Podés seleccionar varias. Si la sospecha es clínica, todas deben cumplir el criterio antes de guardar.</p>
           {catalog.length === 0 && <p className="patient-error">No hay patologías disponibles. El gerente debe configurar el catálogo antes del alta.</p>}
@@ -90,7 +99,7 @@ export default function PatientForm({ session }) {
         {evaluation && <div role="status"><p className={evaluation.valid ? 'patient-success' : 'patient-error'}><CheckCircle2 size={17} aria-hidden="true" />{evaluation.valid ? 'Las sospechas cumplen los criterios para guardar.' : 'Revisá las sospechas que no cumplen los criterios.'}</p><ValidationResults results={evaluation.results} /></div>}
         <p className="patient-help">La comprobación valida la coherencia de las sospechas. No establece un diagnóstico.</p>
       </section>
-      <div className="patient-form-actions"><span>* Campos obligatorios. El acceso del paciente se habilita por separado.</span><div><button type="submit" value="validate" className="patient-secondary" disabled={busy || !catalog.length}>Validar sospechas</button><button type="submit" value="save" className="patient-primary" disabled={busy || !catalog.length}><Save size={16} aria-hidden="true" />{busy ? 'Procesando...' : patientId ? 'Guardar cambios' : 'Guardar paciente'}</button></div></div>
+      {dictationPending && <p className="patient-help" role="status">Añadí o descartá el dictado para habilitar la validación y el guardado.</p>}<div className="patient-form-actions"><span>* Campos obligatorios. El acceso del paciente se habilita por separado.</span><div><button type="submit" value="validate" className="patient-secondary" disabled={busy || dictationPending || !catalog.length}>Validar sospechas</button><button type="submit" value="save" className="patient-primary" disabled={busy || dictationPending || !catalog.length}><Save size={16} aria-hidden="true" />{busy ? 'Procesando...' : patientId ? 'Guardar cambios' : 'Guardar paciente'}</button></div></div>
     </fieldset></form>}
   </section></ClinicalLayout>
 }
