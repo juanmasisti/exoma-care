@@ -165,3 +165,59 @@ test('el gerente no puede entrar a pacientes ni dispara peticiones de pacientes'
   assert.equal(container.querySelector('h1').textContent,'Catálogo de patologías')
   assert.equal(calls.some((c)=>c.url.startsWith('/patients')),false)
 })
+
+test('dictado en edición bloquea guardar hasta revisar y envía solo texto aceptado con versión',async()=>{
+  let recognition
+  dom.SpeechRecognition=class { constructor(){recognition=this} start(){} abort(){} stop(){} }
+  await render('/medico/pacientes/1/editar')
+  await click(button('Iniciar dictado'))
+  await act(async()=>{recognition.onstart();recognition.onresult({results:[Object.assign([{transcript:'Frase dictada ficticia.'}],{isFinal:true})]})})
+  assert.equal(button('Guardar cambios').disabled,true)
+  await act(async()=>recognition.onend())
+  assert.equal(button('Guardar cambios').disabled,true)
+  assert.equal(calls.some(c=>c.method==='put'),false)
+  assert.equal(control('Resumen de historia clínica').value,'Resumen ficticio original')
+  await click(button('Añadir al resumen'))
+  assert.equal(control('Resumen de historia clínica').value,'Resumen ficticio original\n\nFrase dictada ficticia.')
+  await click(button('Guardar cambios'));await settle()
+  const request=calls.find(c=>c.method==='put')
+  assert.equal(request.body.version,1)
+  assert.equal(request.body.clinical_summary,'Resumen ficticio original\n\nFrase dictada ficticia.')
+  assert.equal(Object.keys(request.body).some(k=>/audio|transcript|dictation/.test(k)),false)
+})
+
+test('dictado descartado en alta permite guardar el resumen escrito sin texto de voz',async()=>{
+  let recognition
+  dom.webkitSpeechRecognition=class { constructor(){recognition=this} start(){} abort(){} stop(){} }
+  await render('/medico/pacientes/nuevo');await fillPersonal()
+  await click(control('Enfermedad de Fabry'));await change(control('Seleccionar síntomas presentes'),'1')
+  await click(button('Iniciar dictado'))
+  await act(async()=>recognition.onresult({results:[Object.assign([{transcript:'Descartar esta frase'}],{isFinal:true})]}))
+  assert.equal(button('Guardar paciente').disabled,true)
+  await click(button('Descartar dictado'));await click(button('Guardar paciente'));await settle()
+  assert.equal(calls.find(c=>c.url==='/patients'&&c.method==='post').body.clinical_summary,'Resumen ficticio')
+})
+
+test('cambiar de paciente desmonta captura y no permite guardar datos de la ficha anterior mientras carga',async()=>{
+  let recognition, releasePatient
+  const previousAdapter=api.defaults.adapter
+  api.defaults.adapter=async config=>{
+    if(config.url==='/patients/2'&&config.method==='get') return new Promise(resolve=>{
+      releasePatient=()=>resolve({data:{...patient(),id:2,first_name:'Otro',clinical_summary:'Resumen segundo paciente',version:3},status:200,statusText:'OK',headers:{},config})
+    })
+    return previousAdapter(config)
+  }
+  dom.SpeechRecognition=class { constructor(){recognition=this} start(){} abort(){this.aborted=true} stop(){} }
+  await render('/medico/pacientes/1/editar');await click(button('Iniciar dictado'))
+  const oldResult=recognition.onresult
+  await act(async()=>root.render(React.createElement(Harness,{initialEntries:['/medico/pacientes/1/editar'],navigateTo:'/medico/pacientes/2/editar'})))
+  assert.equal(recognition.aborted,true)
+  assert.equal(Boolean(document.getElementById('patient-summary')),false,'No mostrar ni permitir guardar la ficha anterior mientras carga la siguiente')
+  await act(async()=>oldResult({results:[Object.assign([{transcript:'Texto del primer paciente'}],{isFinal:true})]}))
+  await act(async()=>releasePatient());await settle()
+  assert.equal(control('Nombre').value,'Otro');assert.equal(control('Resumen de historia clínica').value,'Resumen segundo paciente')
+  assert.equal(button('Guardar cambios').disabled,false)
+  await click(button('Guardar cambios'));await settle()
+  const saved=calls.find(c=>c.method==='put');assert.equal(saved.url,'/patients/2');assert.equal(saved.body.version,3)
+  assert.equal(saved.body.clinical_summary,'Resumen segundo paciente')
+})
