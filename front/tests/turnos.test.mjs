@@ -8,7 +8,7 @@ import { AxiosError } from 'axios'
 // El calendario usa la fecha local del navegador: se fija la zona para que la prueba no dependa de la máquina.
 process.env.TZ = 'America/Argentina/Buenos_Aires'
 
-let server, Harness, api, setSession, createRoot, root, container, dom, calls, networkDown, slowDay, taken, slotTaken, hasAppointment, cancelRejected
+let server, Harness, api, setSession, createRoot, root, container, dom, calls, networkDown, slowDay, taken, slotTaken, studyTaken, booked, eligible, myAppointments, cancelRejected
 const WEDNESDAY_10 = new Date('2026-11-04T10:00:00-03:00').getTime()
 const WEDNESDAY_22 = new Date('2026-11-04T22:00:00-03:00').getTime()
 const BEFORE_APPOINTMENT = new Date('2026-11-04T09:00:00-03:00').getTime()
@@ -19,7 +19,7 @@ const provinces = [{ id: 1, name: 'Provincia Demo', active_centers: 3 }, { id: 2
 const manyCenters = Array.from({ length: 14 }, (_, index) => ({ id: 101 + index, name: `Centro GRANDE ${index + 1}`, address: `Calle Demo ${index + 1}, Ciudad Demo`,
   city: 'Ciudad Demo', province_id: 3, latitude: -34.6 - index / 100, longitude: -58.4, phone: null })).sort((a, b) => (a.name < b.name ? -1 : 1))
 // Orden de texto, como lo devuelve el back: "10" antes que "2".
-const appointment = { id: 55, study_id: 7, starts_at: '2026-11-04T09:15:00-03:00', status: 'booked',
+const appointment = { id: 55, study_id: 7, study_code: 'EST-000007', starts_at: '2026-11-04T09:15:00-03:00', status: 'booked',
   center: { id: 10, name: 'Centro DEMO 1', address: 'Calle Demo 100', city: 'Ciudad Demo', phone: '0000-DEMO' } }
 const centers = [
   { id: 12, name: 'Centro DEMO 10', address: 'Calle Demo 300, Ciudad Demo', city: 'Ciudad Demo', province_id: 1, latitude: -34.62, longitude: -58.42, phone: null },
@@ -44,7 +44,8 @@ beforeEach(() => {
   globalThis.window=dom;globalThis.document=dom.document;globalThis.HTMLElement=dom.HTMLElement
   globalThis.IS_REACT_ACT_ENVIRONMENT=true
   container=document.createElement('div');document.body.append(container);root=createRoot(container)
-  calls=[];networkDown=false;slowDay=null;taken=new Set();slotTaken=false;hasAppointment=true;cancelRejected=false
+  calls=[];networkDown=false;slowDay=null;taken=new Set();slotTaken=false;studyTaken=false;booked=false;cancelRejected=false
+  eligible=[{id:7,code:'EST-000007',status:'pagado'}];myAppointments=[]
   mock.timers.enable({apis:['Date'],now:WEDNESDAY_10})
   api.defaults.adapter=async (config) => {
     calls.push({url:config.url,method:config.method,params:config.params,data:config.data&&JSON.parse(config.data)})
@@ -59,15 +60,16 @@ beforeEach(() => {
     }
     else if(config.url==='/appointments'&&config.method==='post') {
       const startsAt=JSON.parse(config.data).starts_at
-      if(slotTaken) {
-        taken.add(startsAt)
-        const response={status:409,statusText:'Conflict',headers:{},config,data:{detail:'El horario ya está reservado en este centro.'}}
-        throw new AxiosError('Request failed with status code 409','ERR_BAD_REQUEST',config,null,response)
+      if(slotTaken||studyTaken) {
+        if(slotTaken) taken.add(startsAt); else booked=true  // studyTaken: se reservó desde otra pestaña
+        const detail=slotTaken?'El horario ya está reservado en este centro.':'El estudio ya tiene un turno vigente.'
+        throw new AxiosError('Request failed with status code 409','ERR_BAD_REQUEST',config,null,{status:409,statusText:'Conflict',headers:{},config,data:{detail}})
       }
+      booked=true
       return {data:{...appointment,starts_at:startsAt},status:201,statusText:'Created',headers:{},config}
     }
     else if(config.url==='/studies/7/appointment') {
-      if(!hasAppointment) {
+      if(!booked) {
         const response={status:404,statusText:'Not Found',headers:{},config,data:{detail:'El estudio no tiene un turno vigente.'}}
         throw new AxiosError('Request failed with status code 404','ERR_BAD_REQUEST',config,null,response)
       }
@@ -78,8 +80,16 @@ beforeEach(() => {
         const response={status:409,statusText:'Conflict',headers:{},config,data:{detail:'No se puede cancelar un turno que ya empezó.'}}
         throw new AxiosError('Request failed with status code 409','ERR_BAD_REQUEST',config,null,response)
       }
+      booked=false
       return {data:'',status:204,statusText:'No Content',headers:{},config}
     }
+    else if(config.url==='/appointments/mine') data=myAppointments
+    else if(config.url==='/studies/999/appointment') {
+      const response={status:404,statusText:'Not Found',headers:{},config,data:{detail:'El estudio no existe o no es tuyo.'}}
+      throw new AxiosError('Request failed with status code 404','ERR_BAD_REQUEST',config,null,response)
+    }
+    // Como el back: un estudio con turno vigente deja de ser elegible.
+    else if(config.url==='/appointments/eligible-studies') data=eligible.filter((study)=>!(booked&&study.id===7))
     else if(config.url==='/extraction-centers') data=[...centers,...manyCenters].filter((c)=>c.province_id===Number(config.params.province_id))
     else if(config.url==='/patients') data={items:[],total:0,offset:0,limit:20}
     else if(['/pathologies','/symptoms'].includes(config.url)) data=[]
@@ -105,11 +115,12 @@ function button(label) {
   const item=[...container.querySelectorAll('button')].find((b)=>b.textContent.trim()===label)
   assert.ok(item,`No se encontró botón ${label}`);return item
 }
+const RESERVE='/paciente/turnos/reservar?estudio=7'
 const province=()=>container.querySelector('#turnos-province')
 const centerButtons=()=>[...container.querySelectorAll('button.turnos-center')]
 const dayButton=(date)=>container.querySelector(`button[data-date="${date}"]`)
 const lastSlotsDate=()=>calls.filter((c)=>c.url.endsWith('/slots')).at(-1)?.params.date
-async function pickCenter(path='/paciente/turnos/reservar') {
+async function pickCenter(path=RESERVE) {
   await render(path)
   await choose(province(),'1')
   await act(async()=>centerButtons()[0].click())
@@ -185,11 +196,11 @@ test('el paciente elige centro, día y horario y ve su selección',async()=>{
   assert.match(summary,/Centro DEMO 1Calle Demo 100, Ciudad Demo/)
   assert.match(summary,/miércoles, 4 de noviembre de 2026/)
   assert.match(summary,/09:15 h/)
-  assert.equal(button('Confirmar turno').disabled,true)
+  assert.equal(button('Confirmar turno').disabled,false)
 })
 
 test('elegir provincia muestra los centros en orden numérico como botones elegibles',async()=>{
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   assert.match(province().textContent,/Provincia Demo \(3 centros\)/)
   await choose(province(),'1')
   assert.equal(calls.find((c)=>c.url==='/extraction-centers').params.province_id,'1')
@@ -202,7 +213,7 @@ test('elegir provincia muestra los centros en orden numérico como botones elegi
 
 test('el mapa muestra un marcador por centro y elegir uno marca su tarjeta',async()=>{
   // StrictMode, como main.jsx: monta los efectos dos veces y el mapa no debe crearse dos veces.
-  await act(async()=>{setSession(patient);root.render(React.createElement(React.StrictMode,null,React.createElement(Harness,{initialEntries:['/paciente/turnos/reservar']})))})
+  await act(async()=>{setSession(patient);root.render(React.createElement(React.StrictMode,null,React.createElement(Harness,{initialEntries:[RESERVE]})))})
   await settle()
   await choose(province(),'1')
   assert.doesNotMatch(container.textContent,/No se pudo cargar el mapa/)
@@ -218,7 +229,7 @@ const centerNames=()=>centerButtons().map((b)=>b.querySelector('strong').textCon
 const range=(from,to)=>Array.from({length:to-from+1},(_,i)=>String(from+i))
 
 test('se ven 8 centros por defecto y la página siguiente muestra los otros',async()=>{
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   await choose(province(),'3')
   assert.deepEqual(centerNames(),range(1,8))
   assert.match(container.querySelector('.patients-pagination').textContent,/1–8 de 14 centros/)
@@ -235,7 +246,7 @@ test('se ven 8 centros por defecto y la página siguiente muestra los otros',asy
 })
 
 test('cambiar a 12 muestra 12 y vuelve a la página 1; con Todos no hay botones de página',async()=>{
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   await choose(province(),'3')
   await act(async()=>button('Siguiente').click())
   await choose(container.querySelector('#turnos-page-size'),'12')
@@ -247,7 +258,7 @@ test('cambiar a 12 muestra 12 y vuelve a la página 1; con Todos no hay botones 
 })
 
 test('elegir desde el mapa un centro de otra página lo muestra elegido',async()=>{
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   await choose(province(),'3')
   const markers=[...container.querySelectorAll('.turnos-map path.leaflet-interactive')]
   assert.equal(markers.length,14)
@@ -257,7 +268,7 @@ test('elegir desde el mapa un centro de otra página lo muestra elegido',async()
 })
 
 test('una provincia sin centros muestra el estado vacío',async()=>{
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   await choose(province(),'2')
   assert.match(container.textContent,/No hay centros activos en esta provincia/)
   assert.equal(centerButtons().length,0)
@@ -265,7 +276,7 @@ test('una provincia sin centros muestra el estado vacío',async()=>{
 
 test('un error de red se informa y se puede reintentar',async()=>{
   networkDown=true
-  await render('/paciente/turnos/reservar')
+  await render(RESERVE)
   assert.match(container.querySelector('[role="alert"]').textContent,/Revisá la conexión/)
   networkDown=false
   await act(async()=>button('Reintentar').click());await settle()
@@ -316,7 +327,7 @@ async function pickSlot(path,label) {
 }
 
 test('confirmar el turno lo reserva y lleva al día de extracción',async()=>{
-  await pickSlot('/paciente/turnos/reservar?estudio=7','09:15')
+  await pickSlot(RESERVE,'09:15')
   assert.equal(button('Confirmar turno').disabled,false)
   await act(async()=>button('Confirmar turno').click());await settle()
   assert.deepEqual(calls.find((c)=>c.url==='/appointments').data,{study_id:7,center_id:10,starts_at:'2026-11-04T09:15:00-03:00'})
@@ -330,7 +341,7 @@ test('confirmar el turno lo reserva y lleva al día de extracción',async()=>{
 
 test('si el horario se ocupó muestra el mensaje del back y vuelve a pedir los horarios del día',async()=>{
   slotTaken=true
-  await pickSlot('/paciente/turnos/reservar?estudio=7','09:15')
+  await pickSlot(RESERVE,'09:15')
   const before=calls.filter((c)=>c.url.endsWith('/slots')).length
   await act(async()=>button('Confirmar turno').click());await settle()
   assert.equal(container.querySelector('.turnos-summary [role="alert"]').textContent,'El horario ya está reservado en este centro.')
@@ -341,16 +352,35 @@ test('si el horario se ocupó muestra el mensaje del back y vuelve a pedir los h
   assert.equal(container.querySelector('h1').textContent,'Reservá tu turno de extracción')
 })
 
-test('sin ?estudio pide elegir el estudio y no deja confirmar',async()=>{
-  await pickSlot('/paciente/turnos/reservar','09:15')
-  const confirm=button('Confirmar turno')
-  assert.equal(confirm.disabled,true)
-  assert.equal(document.getElementById(confirm.getAttribute('aria-describedby')).textContent,'Elegí el estudio para el que querés sacar turno.')
-  assert.equal(calls.some((c)=>c.url==='/appointments'),false)
+test('si el estudio ya se reservó desde otra pestaña, el 409 lleva al aviso y no recarga horarios',async()=>{
+  studyTaken=true
+  await pickSlot(RESERVE,'09:15')
+  const before=calls.filter((c)=>c.url.endsWith('/slots')).length
+  await act(async()=>button('Confirmar turno').click());await settle()
+  assert.match(container.textContent,/Ya tenés un turno para este estudio/)
+  assert.ok(container.querySelector('a[href="/paciente/estudios/7/turno"]'))
+  assert.equal(calls.filter((c)=>c.url.endsWith('/slots')).length,before)
+})
+
+test('un estudio inexistente, ajeno o no habilitado no muestra el formulario',async()=>{
+  await render('/paciente/turnos/reservar?estudio=999')
+  assert.match(container.textContent,/Este estudio no está habilitado para sacar turno/)
+  assert.equal(province(),null)
+  assert.ok(container.querySelector('main a[href="/paciente/turnos/reservar"]'))
+})
+
+test('un error al revisar el estudio se informa y se puede reintentar',async()=>{
+  networkDown=true
+  await render(RESERVE)
+  assert.ok(container.querySelector('[role="alert"]'))
+  networkDown=false
+  await act(async()=>button('Reintentar').click());await settle()
+  assert.ok(province(),'aparece el formulario')
 })
 
 test('cancelar el turno pide confirmación y vuelve a la reserva del mismo estudio',async()=>{
   mock.timers.setTime(BEFORE_APPOINTMENT)
+  booked=true
   await render('/paciente/estudios/7/turno')
   await act(async()=>button('Cancelar turno').click())
   assert.match(container.textContent,/¿Querés cancelar este turno\?/)
@@ -360,12 +390,40 @@ test('cancelar el turno pide confirmación y vuelve a la reserva del mismo estud
   await act(async()=>button('Sí, cancelar turno').click());await settle()
   assert.ok(calls.some((c)=>c.method==='delete'&&c.url==='/appointments/55'))
   assert.equal(container.querySelector('h1').textContent,'Reservá tu turno de extracción')
-  assert.doesNotMatch(container.textContent,/Elegí el estudio para el que querés sacar turno/)
+  assert.ok(province(),'vuelve al formulario del mismo estudio')
+})
+
+test('un error al cancelar se informa y el turno sigue a la vista',async()=>{
+  mock.timers.setTime(BEFORE_APPOINTMENT)
+  booked=true
+  await render('/paciente/estudios/7/turno')
+  networkDown=true
+  await act(async()=>button('Cancelar turno').click())
+  await act(async()=>button('Sí, cancelar turno').click());await settle()
+  assert.ok(container.querySelector('.turnos-appointment [role="alert"]'))
+  assert.equal(container.querySelector('h1').textContent,'Día de extracción')
+  assert.equal(button('Sí, cancelar turno').disabled,false)
+})
+
+for (const [screen,path,loaded] of [
+  ['mis turnos','/paciente/turnos',/No tenés turnos reservados/],
+  ['la elección de estudio','/paciente/turnos/reservar',/EST-000007/],
+  ['el día de extracción','/paciente/estudios/7/turno',/Tu turno/],
+]) test(`un error al cargar ${screen} se informa y se puede reintentar`,async()=>{
+  booked=path.startsWith('/paciente/estudios')
+  networkDown=true
+  await render(path)
+  assert.ok(container.querySelector('main [role="alert"]'))
+  networkDown=false
+  await act(async()=>button('Reintentar').click());await settle()
+  assert.equal(container.querySelector('main [role="alert"]'),null)
+  assert.match(container.textContent,loaded)
 })
 
 test('si el back rechaza la cancelación con 409, no la vuelve a ofrecer',async()=>{
   mock.timers.setTime(BEFORE_APPOINTMENT)
   cancelRejected=true
+  booked=true
   await render('/paciente/estudios/7/turno')
   await act(async()=>button('Cancelar turno').click())
   mock.timers.setTime(new Date('2026-11-04T09:16:00-03:00').getTime())  // confirma después de la hora del turno
@@ -377,14 +435,103 @@ test('si el back rechaza la cancelación con 409, no la vuelve a ofrecer',async(
 })
 
 test('un turno que ya empezó no ofrece cancelar',async()=>{
+  booked=true
   await render('/paciente/estudios/7/turno')  // el turno es a las 9:15 y el reloj marca las 10
   assert.match(container.textContent,/El turno ya empezó: no se puede cancelar/)
   assert.equal([...container.querySelectorAll('button')].some((b)=>b.textContent.includes('Cancelar turno')),false)
 })
 
 test('un estudio sin turno vigente lo informa y ofrece reservar',async()=>{
-  hasAppointment=false
   await render('/paciente/estudios/7/turno')
   assert.match(container.textContent,/Este estudio no tiene un turno vigente/)
   assert.ok(container.querySelector('a[href="/paciente/turnos/reservar?estudio=7"]'))
+})
+
+const note=()=>document.getElementById(button('Confirmar turno').getAttribute('aria-describedby'))?.textContent
+
+test('el botón deshabilitado dice qué falta elegir',async()=>{
+  await render(RESERVE)
+  assert.equal(button('Confirmar turno').disabled,true)
+  assert.equal(note(),'Falta elegir el centro.')
+  await choose(province(),'1')
+  await act(async()=>centerButtons()[0].click())
+  assert.equal(note(),'Falta elegir el día.')
+  await pickDay('2026-11-04')
+  assert.equal(note(),'Falta elegir el horario.')
+  await act(async()=>slotButtons()[0].click())
+  assert.equal(button('Confirmar turno').disabled,false)
+  assert.equal(note(),undefined)
+})
+
+test('un estudio que ya tiene turno avisa y lleva a su día de extracción',async()=>{
+  booked=true
+  await render(RESERVE)
+  assert.match(container.textContent,/Ya tenés un turno para este estudio/)
+  assert.ok(container.querySelector('a[href="/paciente/estudios/7/turno"]'))
+  assert.equal(province(),null)
+})
+
+test('sin ?estudio se elige entre los estudios habilitados',async()=>{
+  await render('/paciente/turnos/reservar')
+  assert.equal(province(),null)
+  await act(async()=>button('EST-000007Pagado').click());await settle()
+  assert.ok(province(),'aparece el formulario del estudio elegido')
+  await pickSlot(RESERVE,'09:15')
+  await act(async()=>button('Confirmar turno').click());await settle()
+  assert.equal(calls.find((c)=>c.url==='/appointments').data.study_id,7)
+})
+
+test('sin estudios habilitados muestra el estado vacío',async()=>{
+  eligible=[]
+  await render('/paciente/turnos/reservar')
+  assert.match(container.textContent,/No tenés estudios habilitados para sacar turno/)
+  assert.ok(container.querySelector('main a[href="/paciente/turnos"]'),'ofrece ver mis turnos')
+})
+
+const crumb=()=>container.querySelector('.clinical-breadcrumb').textContent
+
+test('la miga de pan de mis turnos dice Mis turnos',async()=>{
+  await render('/paciente/turnos')
+  assert.equal(crumb(),'Exoma CareMis turnos')
+})
+
+test('la miga de pan del día de extracción cuelga de Mis turnos',async()=>{
+  booked=true
+  await render('/paciente/estudios/7/turno')
+  assert.equal(crumb(),'Exoma CareMis turnosDía de extracción')
+  assert.ok(container.querySelector('.clinical-breadcrumb a[href="/paciente/turnos"]'))
+})
+
+test('la miga de pan de la reserva sigue diciendo Reservar turno',async()=>{
+  await render(RESERVE)
+  assert.equal(crumb(),'Exoma CareReservar turno')
+})
+
+test('mis turnos lista los turnos con enlace a su día de extracción',async()=>{
+  myAppointments=[appointment]
+  await render('/paciente/turnos')
+  assert.equal(container.querySelector('h1').textContent,'Mis turnos')
+  const card=container.querySelector('.turnos-list').textContent
+  assert.match(card,/Estudio EST-000007/)
+  assert.match(card,/miércoles, 4 de noviembre de 2026/)
+  assert.match(card,/09:15 h/)
+  assert.ok(container.querySelector('.turnos-list a[href="/paciente/estudios/7/turno"]'))
+})
+
+test('mis turnos sin turnos ofrece reservar',async()=>{
+  await render('/paciente/turnos')
+  assert.match(container.textContent,/No tenés turnos reservados/)
+  assert.ok(container.querySelector('main a[href="/paciente/turnos/reservar"]'))
+})
+
+test('el menú del paciente tiene Mis turnos y marca solo la pantalla actual',async()=>{
+  await render('/paciente/turnos')
+  const nav=container.querySelector('.clinical-navigation')
+  assert.equal(nav.querySelector('a[href="/paciente/turnos"]').className,'clinical-nav-active')
+  assert.equal(nav.querySelector('a[href="/paciente/turnos/reservar"]').className,'clinical-nav-link')
+  await act(async()=>nav.querySelector('a[href="/paciente/turnos/reservar"]').click());await settle()
+  // La pantalla nueva monta su propio menú: se vuelve a buscar.
+  const current=container.querySelector('.clinical-navigation')
+  assert.equal(current.querySelector('a[href="/paciente/turnos"]').className,'clinical-nav-link')
+  assert.equal(current.querySelector('a[href="/paciente/turnos/reservar"]').className,'clinical-nav-active')
 })

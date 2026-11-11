@@ -62,15 +62,32 @@ class CenterSummary(BaseModel):
 class AppointmentResponse(BaseModel):
     id: int
     study_id: int
+    study_code: str
     starts_at: datetime
     status: str
     center: CenterSummary
+
+
+class EligibleStudyResponse(BaseModel):
+    id: int
+    code: str
+    status: str
 
 
 class AttendanceResponse(BaseModel):
     id: int
     status: str
     patient_absences: int
+
+
+@router.get("/appointments/mine", response_model=list[AppointmentResponse])
+def my_appointments(actor: AuthenticatedUser = Depends(patient), service: AppointmentService = Depends(get_service)):
+    return service.mis_turnos(actor.id)
+
+
+@router.get("/appointments/eligible-studies", response_model=list[EligibleStudyResponse])
+def eligible_studies(actor: AuthenticatedUser = Depends(patient), service: AppointmentService = Depends(get_service)):
+    return service.estudios_para_turno(actor.id)
 
 
 @router.post("/appointments", response_model=AppointmentResponse, status_code=201)

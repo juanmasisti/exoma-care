@@ -7,6 +7,7 @@ import PatientDetail from './features/pacientes/PatientDetail.jsx'
 import PathologyCatalog from './features/patologias/PathologyCatalog.jsx'
 import ReservarTurno from './features/logistica/turnos/ReservarTurno.jsx'
 import DiaExtraccion from './features/logistica/turnos/DiaExtraccion.jsx'
+import MisTurnos from './features/logistica/turnos/MisTurnos.jsx'
 import { getSession, setSession, subscribeSession } from './services/session.js'
 
 function App() {
@@ -27,12 +28,14 @@ function App() {
     <Route path="/login" element={<Navigate to="/" replace />} />
     <Route path="/catalogo/patologias" element={!session ? <Navigate to="/" replace /> : catalogAccess
       ? <PathologyCatalog session={session} /> : <Navigate to="/portal" replace />} />
+    <Route path="/paciente/turnos" element={patientPortalPage(<MisTurnos session={session} />)} />
     <Route path="/paciente/turnos/reservar" element={patientPortalPage(<ReservarTurno session={session} />)} />
     <Route path="/paciente/estudios/:studyId/turno" element={patientPortalPage(<DiaExtraccion session={session} />)} />
     <Route path="*" element={!session ? <Navigate to="/" replace /> : <main style={{ padding: 32 }}>
       <h1>Sesión iniciada</h1><p>El portal de tu perfil todavía no está disponible en esta entrega.</p>
       {catalogAccess && <Link to="/catalogo/patologias">Consultar catálogo</Link>}
       {session.role === 'patient' && <Link to="/paciente/turnos/reservar">Reservar turno de extracción</Link>}
+      {session.role === 'patient' && <p><Link to="/paciente/turnos">Mis turnos</Link></p>}
       <p><button type="button" onClick={() => setSession(null)}>Cerrar sesión</button></p>
     </main>} />
   </Routes>

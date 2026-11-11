@@ -79,6 +79,11 @@ def is_valid_slot(starts_at: datetime, holidays) -> bool:
     return local in daily_slots(local.date(), holidays)
 
 
+def study_code(study_id: int) -> str:
+    """PROVISORIO (decisión abierta 4 del dominio): código del estudio impreso para el paciente."""
+    return f"EST-{study_id:06d}"
+
+
 class AppointmentStatus(str, Enum):
     BOOKED = "booked"
     CANCELLED = "cancelled"

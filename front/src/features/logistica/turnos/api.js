@@ -16,3 +16,9 @@ export async function getStudyAppointment(studyId) {
 export async function cancelAppointment(appointmentId) {
   await api.delete(`/appointments/${appointmentId}`)
 }
+export async function listMyAppointments() {
+  return (await api.get('/appointments/mine')).data
+}
+export async function listEligibleStudies() {
+  return (await api.get('/appointments/eligible-studies')).data
+}

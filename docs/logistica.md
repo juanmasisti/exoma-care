@@ -40,6 +40,8 @@ Errores:
 | POST /api/appointments | `patient` | Reserva un turno para un estudio propio. 201 con el turno |
 | DELETE /api/appointments/{id} | `patient` | Cancela un turno propio reservado. 204 |
 | GET /api/studies/{id}/appointment | `patient` | Turno vigente de un estudio propio |
+| GET /api/appointments/mine | `patient` | Turnos reservados del paciente, por fecha |
+| GET /api/appointments/eligible-studies | `patient` | Estudios propios habilitados y sin turno vigente: `[{"id": 1, "code": "EST-000001", "status": "pagado"}]` (PROVISORIO) |
 | PATCH /api/appointments/{id}/attendance | `lab_administrator` | Registra si el paciente asistió |
 
 Reserva, por ejemplo:
@@ -49,10 +51,11 @@ POST /api/appointments
 {"study_id": 1, "center_id": 1, "starts_at": "2026-11-02T10:00:00-03:00"}
 ```
 
-`starts_at` tiene que indicar la zona horaria. Respuesta (también la de `GET /api/studies/{id}/appointment`):
+`starts_at` tiene que indicar la zona horaria. Respuesta (también la de
+`GET /api/studies/{id}/appointment` y la de cada turno de `GET /api/appointments/mine`):
 
 ```json
-{"id": 1, "study_id": 1, "starts_at": "2026-11-02T10:00:00-03:00", "status": "booked",
+{"id": 1, "study_id": 1, "study_code": "EST-000001", "starts_at": "2026-11-02T10:00:00-03:00", "status": "booked",
  "center": {"id": 1, "name": "Centro de extracción DEMO La Plata 1",
             "address": "Calle DEMO 1, La Plata", "city": "La Plata", "phone": "DEMO-0000-01"}}
 ```
@@ -76,10 +79,14 @@ Errores:
 
 Solo rol `patient`; código en `front/src/features/logistica/turnos/`.
 
-- `/paciente/turnos/reservar?estudio=ID`: el paciente elige provincia, centro (en las
-  tarjetas o en el mapa de OpenStreetMap), día y horario libre, y confirma el turno. Si el
-  horario se ocupó mientras elegía, ve el mensaje del back y los horarios del día se
-  actualizan. Detalles en la [decisión 005](decisiones/005-logistica-turnero.md#t01-pantalla-del-paciente-para-elegir-centro-y-horario).
+- `/paciente/turnos`: "Mis turnos", con los turnos reservados y el enlace a cada día de
+  extracción.
+- `/paciente/turnos/reservar`: sin `?estudio`, el paciente elige entre sus estudios
+  habilitados. Con `?estudio=ID` elige provincia, centro (en las tarjetas o en el mapa de
+  OpenStreetMap), día y horario libre, y confirma el turno; si el estudio ya tiene turno, la
+  pantalla lo avisa y enlaza a su día de extracción, y si no está habilitado (o no existe o
+  es de otro paciente) lo informa sin mostrar el formulario. Si el horario se ocupó mientras elegía,
+  ve el mensaje del back y los horarios del día se actualizan. Detalles en la [decisión 005](decisiones/005-logistica-turnero.md#t01-pantalla-del-paciente-para-elegir-centro-y-horario).
 - `/paciente/estudios/ID/turno` ("Día de extracción"): fecha, hora y centro del turno, y
   cancelación con confirmación en la misma pantalla.
 

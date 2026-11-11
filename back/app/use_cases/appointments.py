@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app.domain.entities.logistics import TIMEZONE, AppointmentStatus, can_change_appointment, is_valid_slot
+from app.domain.entities.logistics import TIMEZONE, AppointmentStatus, can_change_appointment, is_valid_slot, study_code
 from app.domain.interfaces.appointment_repository import AppointmentRepository, SlotOrStudyTaken
 from app.domain.interfaces.extraction_center_repository import ExtractionCenterRepository
 from app.use_cases.studies import StudyService
@@ -77,6 +77,15 @@ class AppointmentService:
         if appointment is None:
             raise NotFound("El estudio no tiene un turno vigente.")
         return appointment
+
+    def mis_turnos(self, user_id: int) -> list[dict]:
+        return self.appointments.booked_for_user(user_id)
+
+    def estudios_para_turno(self, user_id: int) -> list[dict]:
+        # "Habilitado" lo decide estudios: no se repite la regla de pagado o autorizado.
+        return [{"id": study["id"], "code": study_code(study["id"]), "status": study["status"]}
+                for study in self.appointments.studies_without_booking_for_user(user_id)
+                if self.studies.estudio_habilitado(study["id"])]
 
     def registrar_asistencia(self, appointment_id: int, attended: bool) -> dict:
         appointment = self.appointments.get(appointment_id)

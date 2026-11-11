@@ -6,7 +6,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.entities.logistics import TIMEZONE, AppointmentStatus
+from app.domain.entities.logistics import TIMEZONE, AppointmentStatus, study_code
 from app.domain.interfaces.appointment_repository import SlotOrStudyTaken
 from app.infrastructure.database.logistics_models import AppointmentModel, ExtractionCenterModel
 from app.infrastructure.database.models import Paciente
@@ -26,6 +26,17 @@ class SQLAlchemyAppointmentRepository:
             select(StudyModel.status).join(Paciente, Paciente.id == StudyModel.patient_id)
             .where(StudyModel.id == study_id, Paciente.usuario_id == user_id)
         )
+
+    def studies_without_booking_for_user(self, user_id: int) -> list[dict]:
+        # PROVISORIO (decisión 005, T02): lectura directa hasta que estudios ofrezca la lista
+        # de estudios del paciente. Solo lectura.
+        has_booking = select(AppointmentModel.id).where(
+            AppointmentModel.study_id == StudyModel.id, AppointmentModel.status == BOOKED).exists()
+        rows = self.session.execute(
+            select(StudyModel.id, StudyModel.status).join(Paciente, Paciente.id == StudyModel.patient_id)
+            .where(Paciente.usuario_id == user_id, ~has_booking).order_by(StudyModel.id)
+        )
+        return [{"id": id_, "status": status} for id_, status in rows]
 
     def study_has_booked(self, study_id: int) -> bool:
         return self.session.scalar(select(func.count()).select_from(AppointmentModel).where(
@@ -51,7 +62,7 @@ class SQLAlchemyAppointmentRepository:
     @staticmethod
     def _record(row) -> dict:
         appointment, center, patient_id, patient_user_id = row
-        return {"id": appointment.id, "study_id": appointment.study_id,
+        return {"id": appointment.id, "study_id": appointment.study_id, "study_code": study_code(appointment.study_id),
                 "starts_at": appointment.starts_at.astimezone(TIMEZONE), "status": appointment.status,
                 "study_status_before": appointment.study_status_before,
                 "patient_id": patient_id, "patient_user_id": patient_user_id,
@@ -66,6 +77,11 @@ class SQLAlchemyAppointmentRepository:
         row = self.session.execute(self._select().where(
             AppointmentModel.study_id == study_id, AppointmentModel.status == BOOKED)).first()
         return self._record(row) if row is not None else None
+
+    def booked_for_user(self, user_id: int) -> list[dict]:
+        rows = self.session.execute(self._select().where(
+            Paciente.usuario_id == user_id, AppointmentModel.status == BOOKED).order_by(AppointmentModel.starts_at))
+        return [self._record(row) for row in rows]
 
     def finish(self, appointment_id: int, status: str, cancelled_at: datetime | None = None) -> bool:
         # Condicional: si otro pedido ya lo cerró, no se pisa.

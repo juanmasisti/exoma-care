@@ -169,14 +169,49 @@ consentimiento van en T02b.
 - **Recordatorio:** fuera de T02. Lo agrega el servicio de avisos de Camila cuando exista;
   no se dejó código preparado.
 - **Front:** "Confirmar turno" toma el estudio de `?estudio=ID` (PROVISORIO, hasta que
-  estudios ofrezca la lista de estudios del paciente). Sin el parámetro, el botón queda
-  deshabilitado con "Elegí el estudio para el que querés sacar turno". Al confirmar se va a
+  estudios ofrezca la lista de estudios del paciente). Sin el parámetro se elige el estudio
+  de una lista (ver el agregado de abajo, que reemplazó al botón deshabilitado con "Elegí el
+  estudio para el que querés sacar turno"). Al confirmar se va a
   `/paciente/estudios/ID/turno` ("Día de extracción": fecha, hora, centro y "No requiere
   ayuno ni preparación especial"). Ante un 409 se muestra el mensaje del back y se vuelven a
-  pedir los horarios del día. Cancelar pide confirmación en la misma pantalla y vuelve a la
+  pedir los horarios del día (salvo que el estudio haya dejado de ser reservable: ver el
+  agregado de abajo). Cancelar pide confirmación en la misma pantalla y vuelve a la
   reserva del mismo estudio.
 - `reconcile_legacy_family_revision.py`: se sumaron `0007` y `appointments` a las
   constantes. **Avisarle a Juanma en el PR.**
+
+### Agregado pedido por Ivo para la demo: mis turnos y elección de estudio
+
+Sin migración. Al probar en el navegador faltaba cómo llegar a un turno o a un estudio sin
+escribir la URL (que además cierra la sesión, porque se guarda en memoria: es del área de
+Camila y no se tocó).
+
+- `GET /api/appointments/mine` (solo `patient`): turnos `booked` del paciente, por fecha.
+  Pantalla "Mis turnos" en `/paciente/turnos` e ítem "Mis turnos" en el menú del paciente.
+- `GET /api/appointments/eligible-studies` (solo `patient`). **PROVISORIO:** lee, solo para
+  consultar, los estudios propios sin turno vigente (`studies` → `patients.usuario_id`) y
+  los filtra con `estudio_habilitado`. Se reemplaza por la lista de estudios del paciente
+  de Tomás cuando exista. En la reserva sin `?estudio` se elige uno de esa lista.
+- **Código del estudio (PROVISORIO):** `study_code` arma `EST-000001` con el id. Lo traen
+  las respuestas de turnos y la lista de estudios. Se reemplaza si estudios define su código.
+- **Con `?estudio=ID`** la reserva primero mira si el estudio está en `eligible-studies`:
+  - Si está, muestra el formulario.
+  - Si no está y tiene turno, avisa "Ya tenés un turno para este estudio" y enlaza a su día
+    de extracción.
+  - Si no está y no tiene turno, dice "Este estudio no está habilitado para sacar turno",
+    con un enlace para elegir otro. Es el mismo mensaje para un estudio inexistente, ajeno
+    o sin pagar, para no revelar qué estudios existen.
+  - No se lee el texto del 404 del back para distinguir los casos.
+- **Ante un 409 al confirmar** se repite esa consulta. Si el estudio dejó de ser
+  reservable (por ejemplo, porque se reservó desde otra pestaña), se muestra ese estado. Si
+  sigue siéndolo, el 409 fue por el horario: se muestra el mensaje del back y se vuelven a
+  pedir los horarios del día.
+- "Confirmar turno" deshabilitado siempre dice qué falta (centro, día u horario).
+- La miga de pan dice "Mis turnos" en la lista y "Mis turnos › Día de extracción" en el día
+  de extracción. La reserva sin estudios habilitados enlaza a "Ver mis turnos".
+- `ClinicalLayout`: ítem "Mis turnos" (con `end`, para que no quede marcado junto con
+  "Reservar turno") y miga de pan según la ruta, solo en la rama del paciente. **Avisarle a
+  Juanma en el PR.**
 
 ## Pendiente
 

@@ -4,7 +4,7 @@ import pytest
 
 from app.domain.entities.logistics import (
     TIMEZONE, AppointmentStatus, _easter, available_slots, can_change_appointment, daily_slots,
-    fixed_national_holidays, is_valid_slot,
+    fixed_national_holidays, is_valid_slot, study_code,
 )
 
 MONDAY = date(2026, 11, 2)
@@ -76,6 +76,11 @@ def test_only_booked_appointments_change_status():
     assert not can_change_appointment(booked, booked)
     for final in (AppointmentStatus.CANCELLED, AppointmentStatus.ATTENDED, AppointmentStatus.ABSENT):
         assert not any(can_change_appointment(final, new) for new in AppointmentStatus)
+
+
+def test_study_code_has_six_digits():
+    assert study_code(1) == "EST-000001"
+    assert study_code(123456) == "EST-123456"
 
 
 def test_easter_based_holidays_2026():

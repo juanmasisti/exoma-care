@@ -3,13 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
 import { cancelAppointment, getStudyAppointment } from './api.js'
+import { dateLabel, timeLabel } from './fecha.js'
 import './turnos.css'
-
-// Fecha y hora salen del ISO del back, que ya viene en hora de Argentina; así no dependen de la zona del navegador.
-function dateLabel(iso) {
-  const [year, month, day] = iso.slice(0, 10).split('-').map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-}
 
 export default function DiaExtraccion({ session }) {
   const { studyId } = useParams()
@@ -54,7 +49,7 @@ export default function DiaExtraccion({ session }) {
   }
 
   const center = appointment?.center
-  return <ClinicalLayout session={session}><section className="turnos-page">
+  return <ClinicalLayout session={session} pageLabel="Día de extracción"><section className="turnos-page">
     <header className="turnos-header"><h1>Día de extracción</h1><p>Tu turno para la extracción de sangre del estudio.</p></header>
 
     {loadError ? <div role="alert" className="turnos-error"><p>{loadError}</p><button type="button" onClick={() => { setLoadError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
@@ -64,7 +59,7 @@ export default function DiaExtraccion({ session }) {
             <h2 id="turnos-appointment-title">Tu turno</h2>
             <dl>
               <dt>Fecha</dt><dd>{dateLabel(appointment.starts_at)}</dd>
-              <dt>Hora</dt><dd>{appointment.starts_at.slice(11, 16)} h</dd>
+              <dt>Hora</dt><dd>{timeLabel(appointment.starts_at)}</dd>
               <dt>Centro</dt><dd>{center.name}<small>{center.address}, {center.city}</small>{center.phone && <small>Teléfono: {center.phone}</small>}</dd>
             </dl>
             <p className="turnos-note">No requiere ayuno ni preparación especial.</p>
