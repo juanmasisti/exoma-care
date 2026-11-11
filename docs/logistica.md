@@ -107,8 +107,11 @@ volver a correrlo. Los feriados trasladables y los puentes se cargan a mano en `
 ## Verificación
 
 `./.venv/Scripts/python.exe -m pytest -q` desde `back`. Las pruebas de la API están en
-`tests/test_extraction_centers_api.py` y `tests/test_appointments_api.py`, y fijan la hora
-actual reemplazando `get_clock`.
+`tests/test_extraction_centers_api.py` y `tests/test_appointments_*.py` (reservar, cancelar,
+asistencia y consultas del paciente, con el armado común en `tests/appointments_setup.py`), y
+fijan la hora actual reemplazando `get_clock`.
 
 Pantalla: `npm test` y `npm run lint` desde `front` (Node `^20.19.0` o `>=22.12.0`). Las
-pruebas están en `front/tests/turnos.test.mjs` y fijan la fecha con `mock.timers`.
+pruebas están en `front/tests/turnos-*.test.mjs`, una por pantalla (la reserva en dos:
+horarios y confirmación), con el armado común en `front/tests/turnos-setup.mjs`, y fijan la
+fecha con `mock.timers`.
