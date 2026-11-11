@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.infrastructure.database.logistics_models import ExtractionCenterModel, HolidayModel, ProvinceModel
+from app.domain.entities.logistics import TIMEZONE, AppointmentStatus
+from app.infrastructure.database.logistics_models import (
+    AppointmentModel, ExtractionCenterModel, HolidayModel, ProvinceModel,
+)
 
 
 class SQLAlchemyExtractionCenterRepository:
@@ -46,3 +49,15 @@ class SQLAlchemyExtractionCenterRepository:
     def holiday(self, day: date) -> str | None:
         holiday = self.session.get(HolidayModel, day)
         return holiday.description if holiday is not None else None
+
+    def booked_starts(self, center_id: int, day: date) -> list[datetime]:
+        # El día es el de Buenos Aires; UTCDateTime pasa los límites a UTC para comparar.
+        start = datetime.combine(day, time(0), tzinfo=TIMEZONE)
+        end = datetime.combine(day + timedelta(days=1), time(0), tzinfo=TIMEZONE)
+        return list(self.session.scalars(
+            select(AppointmentModel.starts_at).where(
+                AppointmentModel.center_id == center_id,
+                AppointmentModel.status == AppointmentStatus.BOOKED.value,
+                AppointmentModel.starts_at >= start, AppointmentModel.starts_at < end,
+            )
+        ))

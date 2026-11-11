@@ -1,6 +1,7 @@
 # Logística: centros y turnero (EC-15)
 
-Rama: feature/turnos-extraccion, iniciada desde develop. Responsable: Ivo.
+Rama: feature/turnos-extraccion (T00 y T01) y feature/turnos-reserva (T02), iniciadas desde
+develop. Responsable: Ivo.
 Esta decisión reúne las entregas del turnero; cada tarea completa su sección.
 
 ## T00a: reglas del turnero
@@ -65,7 +66,7 @@ Fecha: 2026-10-30. Sin migración nueva. Contrato en [logistica.md](../logistica
   letras ASCII, igual que en pacientes. Con centros reales, un nombre que empiece con Á o Ñ
   no aparecería al buscarlo en minúscula. Con los datos DEMO no pasa.
 - Las provincias sin centros activos se listan igual, con `active_centers` en 0.
-- Todavía no se descuentan los turnos reservados: las reservas llegan en T02.
+- Todavía no se descuentan los turnos reservados: las reservas llegan en T02 (hecho en T02a).
 
 ## T01: pantalla del paciente para elegir centro y horario
 
@@ -100,7 +101,7 @@ Fecha: 2026-11-01. Solo front. Ruta `/paciente/turnos/reservar`, únicamente par
 - **Horarios:** la hora se lee del ISO que devuelve el back, que ya viene en hora de
   Argentina, así no depende de la zona del navegador.
 - **Confirmar turno:** deshabilitado con la leyenda "Disponible cuando se habilite la
-  reserva" hasta T02 (falta la tabla `studies`).
+  reserva" hasta T02 (falta la tabla `studies`). Habilitado en T02a.
 - **`ClinicalLayout`:** se agregó la rama del rol `patient` (rótulo "Paciente", ítem
   "Reservar turno", textos del menú, avatar, perfil y miga de pan, y sin el enlace al
   catálogo). El cambio es solo aditivo: para médico y gerente no cambia nada. **Avisarle a
@@ -113,8 +114,115 @@ Fecha: 2026-11-01. Solo front. Ruta `/paciente/turnos/reservar`, únicamente par
   Node 20.14, npm no instala los binarios de rolldown y oxlint, y `npm test` no expande
   `tests/*.test.mjs`.
 
+## T02a: reserva, cancelación y asistencia de turnos
+
+Fecha: 2026-11-10. Rama `feature/turnos-reserva`, desde `develop`. Migración `0007`.
+Contrato en [logistica.md](../logistica.md#turnos). Los PDF de la orden y el
+consentimiento van en T02b.
+
+- **Reglas:** en `logistics.py` se agregaron `AppointmentStatus` (`booked`, `cancelled`,
+  `attended`, `absent`), sus transiciones (solo desde `booked`), `is_valid_slot` y el
+  descuento de los reservados en `available_slots`. `is_valid_slot` acepta cualquier zona
+  horaria: `10:00-03:00` y `13:00Z` son el mismo turno.
+- **Tabla `appointments`:** `study_id` y `center_id` con FK, `starts_at`, `status`,
+  `created_at`, `cancelled_at` y `study_status_before`. **`study_status_before` es un
+  agregado a la tabla de la sección 3 del dominio:** guarda el estado del estudio antes de
+  la reserva, para restaurarlo al cancelar. Las fechas se guardan en UTC con un
+  `TypeDecorator` (`UTCDateTime`), porque SQLite descarta la zona sin convertir y el mismo
+  turno con otra zona no chocaría en el índice. Una fecha sin zona se rechaza.
+- **Unicidad:** dos índices únicos parciales donde `status = 'booked'`:
+  `(center_id, starts_at)` y `(study_id)`. SQLite no respeta `SELECT ... FOR UPDATE`, así
+  que el choque lo resuelve la base: el `IntegrityError` se traduce a 409. Para elegir el
+  mensaje ("El estudio ya tiene un turno vigente." o "El horario ya está reservado en este
+  centro.") se hace una consulta después, en vez de leer el texto del error, que cambia
+  entre SQLite y PostgreSQL. Cancelar y registrar asistencia usan un `UPDATE ... WHERE
+  status = 'booked'`: si dos pedidos cierran el mismo turno, el segundo recibe 409.
+- **Dueño del estudio (PROVISORIO):** el repositorio de turnos lee, solo para consultar,
+  `studies.patient_id` → `patients.usuario_id` y, en la misma consulta, `studies.status`
+  (para `study_status_before`). No escribe en esas tablas. Se reemplaza cuando estudios y
+  pacientes ofrezcan el dato por su servicio. Si el estudio no existe o es de otro paciente
+  se responde 404, igual en los dos casos, para no revelar qué estudios existen.
+- **Estudio no habilitado → 409**, no 422: el pedido es válido pero el estado del estudio
+  no lo permite. Lo decide `estudio_habilitado`; logística no repite la regla.
+- **Transacción:** el turno y el cambio de estado del estudio (`turno_sacado` al reservar,
+  `study_status_before` al cancelar) se confirman juntos con una sola sesión por pedido.
+  Para eso `cambiar_estado_estudio` dejó de hacer commit (ver la decisión 008): lo hace el
+  caso de uso de turnos. Si el cambio de estado falla, no queda el turno.
+- **Orden de las validaciones al reservar:** estudio propio (404), habilitado (409),
+  centro activo (404), turno válido (422) y no pasado según `get_clock` (422).
+- **404:** el caso de uso lanza su propia `NotFound` y la ruta traduce solo esa. Así un
+  `KeyError` por un error de programación (también es `LookupError`) da 500 y no un 404.
+- **Cancelar:** solo el dueño (un turno ajeno da 404) y solo si está `booked`; guarda
+  `cancelled_at`. El horario vuelve a ofrecerse.
+  - **No se puede cancelar un turno que ya empezó** según `get_clock` (409). Si no, el
+    paciente que faltó podría cancelar antes de que se cargue la asistencia y esquivar la
+    inasistencia. En "Día de extracción" el botón no se muestra en ese caso. **Regla
+    decidida por Ivo, a confirmar con el profesor.**
+  - Solo se restaura `study_status_before` si el estudio sigue en `turno_sacado`. Si otra
+    etapa ya lo avanzó (por ejemplo, `listo_para_retirar` con el aviso de extracción de
+    T03), se responde 409 y no se toca nada, para no hacerlo retroceder.
+- **Asistencia:** solo `lab_administrator`, solo sobre un turno `booked`. Lleva el contador
+  de inasistencias del paciente (`patient_absences`); la sanción sigue ABIERTA (decisión 7
+  del dominio). No exige que el turno haya empezado: la ficha no lo pide.
+- **Horarios libres:** `booked_starts` cuenta solo los `booked` del día de Buenos Aires
+  (de 0 a 24 h de Argentina pasado a UTC).
+- **Recordatorio:** fuera de T02. Lo agrega el servicio de avisos de Camila cuando exista;
+  no se dejó código preparado.
+- **Front:** "Confirmar turno" toma el estudio de `?estudio=ID` (PROVISORIO, hasta que
+  estudios ofrezca la lista de estudios del paciente). Sin el parámetro se elige el estudio
+  de una lista (ver el agregado de abajo, que reemplazó al botón deshabilitado con "Elegí el
+  estudio para el que querés sacar turno"). Al confirmar se va a
+  `/paciente/estudios/ID/turno` ("Día de extracción": fecha, hora, centro y "No requiere
+  ayuno ni preparación especial"). Ante un 409 se muestra el mensaje del back y se vuelven a
+  pedir los horarios del día (salvo que el estudio haya dejado de ser reservable: ver el
+  agregado de abajo). Cancelar pide confirmación en la misma pantalla y vuelve a la
+  reserva del mismo estudio.
+- `reconcile_legacy_family_revision.py`: se sumaron `0007` y `appointments` a las
+  constantes. **Avisarle a Juanma en el PR.**
+
+### Agregado pedido por Ivo para la demo: mis turnos y elección de estudio
+
+Sin migración. Al probar en el navegador faltaba cómo llegar a un turno o a un estudio sin
+escribir la URL (que además cierra la sesión, porque se guarda en memoria: es del área de
+Camila y no se tocó).
+
+- `GET /api/appointments/mine` (solo `patient`): turnos `booked` del paciente, por fecha.
+  Pantalla "Mis turnos" en `/paciente/turnos` e ítem "Mis turnos" en el menú del paciente.
+- `GET /api/appointments/eligible-studies` (solo `patient`). **PROVISORIO:** lee, solo para
+  consultar, los estudios propios sin turno vigente (`studies` → `patients.usuario_id`) y
+  los filtra con `estudio_habilitado`. Se reemplaza por la lista de estudios del paciente
+  de Tomás cuando exista. En la reserva sin `?estudio` se elige uno de esa lista.
+- **Código del estudio (PROVISORIO):** `study_code` arma `EST-000001` con el id. Lo traen
+  las respuestas de turnos y la lista de estudios. Se reemplaza si estudios define su código.
+- **Con `?estudio=ID`** la reserva primero mira si el estudio está en `eligible-studies`:
+  - Si está, muestra el formulario.
+  - Si no está y tiene turno, avisa "Ya tenés un turno para este estudio" y enlaza a su día
+    de extracción.
+  - Si no está y no tiene turno, dice "Este estudio no está habilitado para sacar turno",
+    con un enlace para elegir otro. Es el mismo mensaje para un estudio inexistente, ajeno
+    o sin pagar, para no revelar qué estudios existen.
+  - No se lee el texto del 404 del back para distinguir los casos.
+- **Ante un 409 al confirmar** se repite esa consulta. Si el estudio dejó de ser
+  reservable (por ejemplo, porque se reservó desde otra pestaña), se muestra ese estado. Si
+  sigue siéndolo, el 409 fue por el horario: se muestra el mensaje del back y se vuelven a
+  pedir los horarios del día.
+- "Confirmar turno" deshabilitado siempre dice qué falta (centro, día u horario).
+- La miga de pan dice "Mis turnos" en la lista y "Mis turnos › Día de extracción" en el día
+  de extracción. La reserva sin estudios habilitados enlaza a "Ver mis turnos".
+- `ClinicalLayout`: ítem "Mis turnos" (con `end`, para que no quede marcado junto con
+  "Reservar turno") y miga de pan según la ruta, solo en la rama del paciente. **Avisarle a
+  Juanma en el PR.**
+
 ## Pendiente
 
+- PDF de la orden de extracción y del consentimiento (T02b).
+- Si registrar la asistencia tiene que esperar a que empiece el turno.
+- Confirmar con el profesor que no se puede cancelar un turno que ya empezó.
+- **Para T03:** al cancelar se lee el estado del estudio y después se escribe
+  `study_status_before` sin condición. Hoy nadie más cambia ese estado. Pero si el aviso de
+  extracción lo cambia entre esa lectura y esa escritura, el estudio retrocedería. Cuando
+  exista T03, la escritura tendría que exigir el estado anterior (`WHERE status =
+  'turno_sacado'`) y responder 409 si no actualiza ninguna fila. Coordinarlo con Tomás.
 - Quién carga cada año los feriados trasladables, los puentes y los feriados fijos de los
   años siguientes (hoy: volver a correr el seed y cargar el resto a mano).
 - Con cuánta anticipación máxima se puede pedir turno. Las fuentes no lo indican, así que

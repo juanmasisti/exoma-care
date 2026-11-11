@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
-import { getSlots, listCenters, listProvinces } from './api.js'
+import { bookAppointment, getSlots, getStudyAppointment, listCenters, listEligibleStudies, listProvinces } from './api.js'
 import CentersMap from './CentersMap.jsx'
 // Por la paginación, que usa las mismas clases que PatientsList (patients-pagination).
 import '../../pacientes/patients.css'
@@ -15,7 +16,83 @@ function dateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+const STATUS_LABELS = { pagado: 'Pagado', autorizado: 'Autorizado' }
+
 export default function ReservarTurno({ session }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const studyParam = Number(searchParams.get('estudio'))
+  const studyId = Number.isInteger(studyParam) && studyParam > 0 ? studyParam : null
+  return <ClinicalLayout session={session}><section className="turnos-page">
+    <header className="turnos-header"><h1>Reservá tu turno de extracción</h1><p>Elegí un centro de extracción y un horario libre.</p></header>
+    {studyId ? <EstudioElegido key={studyId} studyId={studyId} />
+      : <ElegirEstudio onChoose={(id) => setSearchParams({ estudio: String(id) })} />}
+  </section></ClinicalLayout>
+}
+
+// PROVISORIO: usa la lista de logística hasta que estudios ofrezca la de los estudios del paciente.
+function ElegirEstudio({ onChoose }) {
+  const [studies, setStudies] = useState(null)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let active = true
+    listEligibleStudies().then((data) => { if (active) setStudies(data) })
+      .catch((failure) => { if (active) setError(errorMessage(failure)) })
+    return () => { active = false }
+  }, [retry])
+  return <section className="turnos-card" aria-labelledby="turnos-study-title">
+    <h2 id="turnos-study-title">Elegí el estudio para el que querés sacar turno</h2>
+    {error ? <div role="alert" className="turnos-error"><p>{error}</p><button type="button" onClick={() => { setError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
+      : !studies ? <p role="status" className="turnos-loading">Cargando estudios...</p>
+        : studies.length === 0 ? <><p className="turnos-empty">No tenés estudios habilitados para sacar turno.</p><Link to="/paciente/turnos">Ver mis turnos</Link></>
+          : <ul className="turnos-centers">{studies.map((study) => <li key={study.id}>
+            <button type="button" className="turnos-center" onClick={() => onChoose(study.id)}>
+              <span><strong>{study.code}</strong><small>{STATUS_LABELS[study.status] ?? study.status}</small></span>
+            </button></li>)}</ul>}
+  </section>
+}
+
+// 'form' si se puede reservar, 'booked' si ya tiene turno e 'ineligible' si no está habilitado, no existe o es ajeno.
+async function studyState(studyId) {
+  if ((await listEligibleStudies()).some((study) => study.id === studyId)) return 'form'
+  try {
+    await getStudyAppointment(studyId)
+    return 'booked'
+  } catch (failure) {
+    if (failure.response?.status === 404) return 'ineligible'
+    throw failure
+  }
+}
+
+function EstudioElegido({ studyId }) {
+  const [state, setState] = useState(null) // null mientras se consulta
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let active = true
+    studyState(studyId).then((result) => { if (active) setState(result) })
+      .catch((failure) => { if (active) setError(errorMessage(failure)) })
+    return () => { active = false }
+  }, [studyId, retry])
+  // Ante un 409 al confirmar: si el estudio cambió se muestra eso; devuelve true si se puede seguir reservando.
+  async function recheck() {
+    const result = await studyState(studyId)
+    if (result !== 'form') setState(result)
+    return result === 'form'
+  }
+  if (error) return <div role="alert" className="turnos-error"><p>{error}</p><button type="button" onClick={() => { setError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
+  if (!state) return <p role="status" className="turnos-loading">Revisando el estudio...</p>
+  if (state === 'booked') return <div className="turnos-card turnos-appointment"><p className="turnos-empty">Ya tenés un turno para este estudio.</p>
+    <Link to={`/paciente/estudios/${studyId}/turno`}>Ver tu día de extracción</Link></div>
+  if (state === 'ineligible') return <div className="turnos-card turnos-appointment"><p className="turnos-empty">Este estudio no está habilitado para sacar turno.</p>
+    <Link to="/paciente/turnos/reservar">Elegir otro estudio</Link></div>
+  return <ReservaForm studyId={studyId} recheckStudy={recheck} />
+}
+
+function ReservaForm({ studyId, recheckStudy }) {
+  const navigate = useNavigate()
+  const [booking, setBooking] = useState(false)
+  const [bookingError, setBookingError] = useState('')
   const [provinces, setProvinces] = useState(null)
   const [provincesError, setProvincesError] = useState('')
   const [provincesRetry, setProvincesRetry] = useState(0)
@@ -70,6 +147,19 @@ export default function ReservarTurno({ session }) {
     if (pageSize) setPage(Math.floor(centers.findIndex((item) => item.id === id) / pageSize))
     chooseCenter(id)
   }
+  function chooseSlot(starts) { setSlot(starts); setBookingError('') }
+  async function confirm() {
+    setBooking(true); setBookingError('')
+    try {
+      await bookAppointment(studyId, centerId, slot)
+      navigate(`/paciente/estudios/${studyId}/turno`)
+    } catch (failure) {
+      setBookingError(errorMessage(failure))
+      // Si el estudio sigue reservable, el 409 fue por el horario: se vuelven a pedir los del día para que desaparezca.
+      if (failure.response?.status === 409 && await recheckStudy().catch(() => true)) chooseDay(day)
+      setBooking(false) // recién acá, para que no se pueda confirmar mientras se revisa el estudio
+    }
+  }
   function moveMonth(step) { const first = new Date(month.year, month.month + step, 1); setMonth({ year: first.getFullYear(), month: first.getMonth() }) }
 
   const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate())
@@ -79,16 +169,14 @@ export default function ReservarTurno({ session }) {
   const monthName = new Date(month.year, month.month, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
   const monthLabel = monthName[0].toUpperCase() + monthName.slice(1)
   const center = centers?.find((item) => item.id === centerId)
+  const missing = !center ? 'Falta elegir el centro.' : !day ? 'Falta elegir el día.' : !slot ? 'Falta elegir el horario.' : ''
   const total = centers?.length ?? 0
   const limit = pageSize || total
   const offset = page * limit
   const [year, monthNumber, dayNumber] = day ? day.split('-').map(Number) : []
   const dayLabel = day && new Date(year, monthNumber - 1, dayNumber).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  return <ClinicalLayout session={session}><section className="turnos-page">
-    <header className="turnos-header"><h1>Reservá tu turno de extracción</h1><p>Elegí un centro de extracción y un horario libre.</p></header>
-
-    <div className="turnos-layout"><div className="turnos-steps">
+  return <div className="turnos-layout"><div className="turnos-steps">
     <section className="turnos-card" aria-labelledby="turnos-centers-title">
       <h2 id="turnos-centers-title">1. Centro de extracción</h2>
       {provincesError ? <div role="alert" className="turnos-error"><p>{provincesError}</p><button type="button" onClick={() => { setProvincesError(''); setProvincesRetry((n) => n + 1) }}>Reintentar</button></div>
@@ -144,7 +232,7 @@ export default function ReservarTurno({ session }) {
         : !slots ? <p role="status" className="turnos-loading">Cargando horarios...</p>
           : slots.holiday ? <p className="turnos-empty">Feriado: {slots.holiday}</p>
             : slots.slots.length === 0 ? <p className="turnos-empty">No hay turnos libres.</p>
-              : <div className="turnos-slots" role="group" aria-label="Horarios libres">{slots.slots.map((starts) => <button key={starts} type="button" className="turnos-slot" aria-pressed={starts === slot} onClick={() => setSlot(starts)}>{starts.slice(11, 16)}</button>)}</div>}</div>
+              : <div className="turnos-slots" role="group" aria-label="Horarios libres">{slots.slots.map((starts) => <button key={starts} type="button" className="turnos-slot" aria-pressed={starts === slot} onClick={() => chooseSlot(starts)}>{starts.slice(11, 16)}</button>)}</div>}</div>
     </section>}
 
     </div>
@@ -157,9 +245,10 @@ export default function ReservarTurno({ session }) {
         {/* La hora sale del ISO del back, que ya viene en hora de Argentina; así no depende de la zona del navegador. */}
         <dt>Hora</dt><dd>{slot ? `${slot.slice(11, 16)} h` : 'Sin elegir'}</dd>
       </dl>
-      <button type="button" className="turnos-primary" disabled aria-describedby="turnos-confirm-note">Confirmar turno</button>
-      <p id="turnos-confirm-note">Disponible cuando se habilite la reserva.</p>
+      {bookingError && <div role="alert" className="turnos-error turnos-booking-error"><p>{bookingError}</p></div>}
+      <button type="button" className="turnos-primary" disabled={Boolean(missing) || booking} onClick={confirm}
+        aria-describedby={missing ? 'turnos-confirm-note' : undefined}>{booking ? 'Reservando...' : 'Confirmar turno'}</button>
+      {missing && <p id="turnos-confirm-note">{missing}</p>}
     </aside>
-    </div>
-  </section></ClinicalLayout>
+  </div>
 }

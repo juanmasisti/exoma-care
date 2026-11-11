@@ -1,5 +1,6 @@
-"""Reglas puras de logística: días hábiles, feriados fijos y turnos de extracción."""
+"""Reglas puras de logística: días hábiles, feriados fijos, horarios y estados de turnos de extracción."""
 from datetime import date, datetime, time, timedelta
+from enum import Enum
 from zoneinfo import ZoneInfo
 
 TIMEZONE = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -62,8 +63,39 @@ def daily_slots(day: date, holidays) -> list[datetime]:
     return slots
 
 
-def available_slots(day: date, holidays, now: datetime) -> list[datetime]:
+def available_slots(day: date, holidays, now: datetime, booked=()) -> list[datetime]:
     if now.tzinfo is None:
         raise ValueError("La hora actual debe indicar la zona horaria.")
+    booked = set(booked)
     # Un turno que empieza justo ahora ya no se puede reservar.
-    return [slot for slot in daily_slots(day, holidays) if slot > now]
+    return [slot for slot in daily_slots(day, holidays) if slot > now and slot not in booked]
+
+
+def is_valid_slot(starts_at: datetime, holidays) -> bool:
+    """Día hábil, entre 9 y 17:45 y en punto de un turno de 15 minutos. No mira si es pasado."""
+    if starts_at.tzinfo is None:
+        raise ValueError("La fecha y hora del turno debe indicar la zona horaria.")
+    local = starts_at.astimezone(TIMEZONE)
+    return local in daily_slots(local.date(), holidays)
+
+
+def study_code(study_id: int) -> str:
+    """PROVISORIO (decisión abierta 4 del dominio): código del estudio impreso para el paciente."""
+    return f"EST-{study_id:06d}"
+
+
+class AppointmentStatus(str, Enum):
+    BOOKED = "booked"
+    CANCELLED = "cancelled"
+    ATTENDED = "attended"
+    ABSENT = "absent"
+
+
+# Solo un turno reservado cambia; cancelado, asistido y ausente son finales.
+APPOINTMENT_TRANSITIONS = {
+    AppointmentStatus.BOOKED: {AppointmentStatus.CANCELLED, AppointmentStatus.ATTENDED, AppointmentStatus.ABSENT},
+}
+
+
+def can_change_appointment(current: AppointmentStatus, new: AppointmentStatus) -> bool:
+    return new in APPOINTMENT_TRANSITIONS.get(current, set())

@@ -64,13 +64,24 @@ def test_invalid_status_raises_value_error_and_changes_nothing(factory):
         assert session.get(StudyModel, study_id).status == "pendiente_pago"
 
 
-def test_status_change_is_persisted(factory):
+def test_status_change_is_persisted_when_the_caller_commits(factory):
     study_id = add_study(factory, "pendiente_pago")
     with factory() as session:
         service(session).cambiar_estado_estudio(study_id, "pagado")
+        session.commit()
     with factory() as session:
         assert session.get(StudyModel, study_id).status == "pagado"
         assert service(session).estudio_habilitado(study_id) is True
+
+
+def test_status_change_is_not_committed_by_the_service(factory):
+    study_id = add_study(factory, "pendiente_pago")
+    with factory() as session:
+        service(session).cambiar_estado_estudio(study_id, "pagado")
+        assert service(session).estudio_habilitado(study_id) is True  # visible en la misma sesión
+        session.rollback()
+    with factory() as session:
+        assert session.get(StudyModel, study_id).status == "pendiente_pago"
 
 
 def test_seed_without_demo_patient_creates_nothing(factory, capsys):
