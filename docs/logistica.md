@@ -1,7 +1,10 @@
-# Logística: centros de extracción y horarios (EC-15)
+# Logística: centros de extracción, horarios y turnos (EC-15)
 
 Implementación y reglas: [decisión 005](decisiones/005-logistica-turnero.md).
-Requiere JWT con rol `patient`. Por ahora solo consulta: las reservas llegan en una entrega posterior.
+
+## Centros y horarios
+
+Requiere JWT con rol `patient`.
 
 | Método y ruta | Función |
 | --- | --- |
@@ -21,7 +24,8 @@ Horarios, por ejemplo `GET /api/extraction-centers/1/slots?date=2026-12-08`:
 En un día hábil, `slots` trae los turnos de 15 minutos de 9:00 a 17:45 con hora de
 Argentina (`"2026-11-02T09:00:00-03:00"`). Los turnos que ya empezaron no se ofrecen y un
 día pasado devuelve la lista vacía. Sábados, domingos y feriados de la tabla `holidays`
-no tienen horarios.
+no tienen horarios. Los horarios con un turno reservado tampoco se ofrecen; al cancelarlo,
+el horario vuelve a aparecer.
 
 Errores:
 - 401: sin sesión.
@@ -29,13 +33,55 @@ Errores:
 - 404: centro inexistente o inactivo.
 - 422: `date` ausente o inválida (enviarla como AAAA-MM-DD), o `q` de más de 100 caracteres.
 
-## Pantalla del paciente
+## Turnos
 
-`/paciente/turnos/reservar` (solo rol `patient`; código en
-`front/src/features/logistica/turnos/`). El paciente elige provincia, centro (en las
-tarjetas o en el mapa de OpenStreetMap), día y horario libre, y ve su selección. Usa los
-tres endpoints de arriba. "Confirmar turno" queda deshabilitado hasta que exista la reserva.
-Detalles en la [decisión 005](decisiones/005-logistica-turnero.md#t01-pantalla-del-paciente-para-elegir-centro-y-horario).
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| POST /api/appointments | `patient` | Reserva un turno para un estudio propio. 201 con el turno |
+| DELETE /api/appointments/{id} | `patient` | Cancela un turno propio reservado. 204 |
+| GET /api/studies/{id}/appointment | `patient` | Turno vigente de un estudio propio |
+| PATCH /api/appointments/{id}/attendance | `lab_administrator` | Registra si el paciente asistió |
+
+Reserva, por ejemplo:
+
+```json
+POST /api/appointments
+{"study_id": 1, "center_id": 1, "starts_at": "2026-11-02T10:00:00-03:00"}
+```
+
+`starts_at` tiene que indicar la zona horaria. Respuesta (también la de `GET /api/studies/{id}/appointment`):
+
+```json
+{"id": 1, "study_id": 1, "starts_at": "2026-11-02T10:00:00-03:00", "status": "booked",
+ "center": {"id": 1, "name": "Centro de extracción DEMO La Plata 1",
+            "address": "Calle DEMO 1, La Plata", "city": "La Plata", "phone": "DEMO-0000-01"}}
+```
+
+Al reservar, el estudio pasa a `turno_sacado`; al cancelar, vuelve al estado que tenía.
+Asistencia: `{"attended": true}` deja el turno en `attended` y `false` en `absent`. La
+respuesta trae `patient_absences`, la cantidad de inasistencias del paciente.
+
+Errores:
+- 401: sin sesión.
+- 403: rol no permitido.
+- 404: el estudio no existe o no es del paciente; el turno no existe o es de otro paciente;
+  el centro no existe o está inactivo; el estudio no tiene turno vigente.
+- 409: el estudio no está pagado ni autorizado, ya tiene un turno vigente, o el horario ya
+  está reservado en ese centro; cancelar o registrar asistencia de un turno que no está
+  reservado; cancelar un turno que ya empezó, o cuyo estudio ya pasó a otra etapa.
+- 422: horario que no es un turno válido (sábado, domingo, feriado, fuera de 9 a 17:45 o
+  fuera de los 15 minutos), horario pasado, o `starts_at` sin zona horaria.
+
+## Pantallas del paciente
+
+Solo rol `patient`; código en `front/src/features/logistica/turnos/`.
+
+- `/paciente/turnos/reservar?estudio=ID`: el paciente elige provincia, centro (en las
+  tarjetas o en el mapa de OpenStreetMap), día y horario libre, y confirma el turno. Si el
+  horario se ocupó mientras elegía, ve el mensaje del back y los horarios del día se
+  actualizan. Detalles en la [decisión 005](decisiones/005-logistica-turnero.md#t01-pantalla-del-paciente-para-elegir-centro-y-horario).
+- `/paciente/estudios/ID/turno` ("Día de extracción"): fecha, hora y centro del turno, y
+  cancelación con confirmación en la misma pantalla.
 
 ## Preparar y ejecutar (Git Bash)
 
@@ -43,7 +89,7 @@ Desde `back`:
 
 ```bash
 ./.venv/Scripts/python.exe -m alembic upgrade head
-# Debe informar 0004. Carga opcional de provincias, 100 centros DEMO y feriados fijos:
+# Debe informar 0007. Carga opcional de provincias, 100 centros DEMO y feriados fijos:
 ./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers
 bash dev.sh
 ```
@@ -54,7 +100,8 @@ volver a correrlo. Los feriados trasladables y los puentes se cargan a mano en `
 ## Verificación
 
 `./.venv/Scripts/python.exe -m pytest -q` desde `back`. Las pruebas de la API están en
-`tests/test_extraction_centers_api.py` y fijan la hora actual reemplazando `get_clock`.
+`tests/test_extraction_centers_api.py` y `tests/test_appointments_api.py`, y fijan la hora
+actual reemplazando `get_clock`.
 
 Pantalla: `npm test` y `npm run lint` desde `front` (Node `^20.19.0` o `>=22.12.0`). Las
 pruebas están en `front/tests/turnos.test.mjs` y fijan la fecha con `mock.timers`.

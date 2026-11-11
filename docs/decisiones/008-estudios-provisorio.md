@@ -17,7 +17,10 @@ provisoria**. Tomás la amplía después con su propia migración (desde `0006`)
   - `estudio_habilitado(study_id) -> bool`: `True` si el estado es `pagado` o `autorizado`;
     `LookupError` si el estudio no existe.
   - `cambiar_estado_estudio(study_id, nuevo_estado) -> None`: `ValueError` si el estado no está
-    en la lista; `LookupError` si el estudio no existe.
+    en la lista; `LookupError` si el estudio no existe. **No hace commit** (ajuste de T02): deja
+    el cambio en la sesión y lo confirma quien llama, junto con sus propios cambios. Así la
+    reserva de un turno y el paso a `turno_sacado` se guardan o se descartan juntos, sin depender
+    de cómo esté hecho el módulo de estudios. Quien la use tiene que hacer `commit`.
 - Seed DEMO optativo y repetible `seed_demo_studies`: para el paciente con DNI 45000001 crea un
   estudio `pagado`, uno `autorizado` y uno `pendiente_pago`. Si el paciente no existe, avisa y no crea nada.
 - Sin endpoints ni pantallas: se agregan en T02 cuando hagan falta.
@@ -36,3 +39,4 @@ que cree tablas tiene que sumarse a esas dos constantes.**
   (`cambiar_estado_estudio(study_id, nuevo, actor)`). Hoy cualquier estado válido se acepta.
 - El resto de los campos del estudio (pagos, presupuesto, autorización, médico, etc.).
 - Mantener las dos funciones con la misma firma (o avisar si cambia) para no romper logística.
+- Mantener que `cambiar_estado_estudio` no haga commit: turnos depende de eso para la atomicidad.

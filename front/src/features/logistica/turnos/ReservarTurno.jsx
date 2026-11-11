@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
-import { getSlots, listCenters, listProvinces } from './api.js'
+import { bookAppointment, getSlots, listCenters, listProvinces } from './api.js'
 import CentersMap from './CentersMap.jsx'
 // Por la paginación, que usa las mismas clases que PatientsList (patients-pagination).
 import '../../pacientes/patients.css'
@@ -16,6 +17,12 @@ function dateKey(year, month, day) {
 }
 
 export default function ReservarTurno({ session }) {
+  const navigate = useNavigate()
+  // PROVISORIO: hasta que estudios ofrezca la lista de estudios del paciente, llega por ?estudio=ID.
+  const studyParam = Number(useSearchParams()[0].get('estudio'))
+  const studyId = Number.isInteger(studyParam) && studyParam > 0 ? studyParam : null
+  const [booking, setBooking] = useState(false)
+  const [bookingError, setBookingError] = useState('')
   const [provinces, setProvinces] = useState(null)
   const [provincesError, setProvincesError] = useState('')
   const [provincesRetry, setProvincesRetry] = useState(0)
@@ -69,6 +76,19 @@ export default function ReservarTurno({ session }) {
   function chooseFromMap(id) {
     if (pageSize) setPage(Math.floor(centers.findIndex((item) => item.id === id) / pageSize))
     chooseCenter(id)
+  }
+  function chooseSlot(starts) { setSlot(starts); setBookingError('') }
+  async function confirm() {
+    setBooking(true); setBookingError('')
+    try {
+      await bookAppointment(studyId, centerId, slot)
+      navigate(`/paciente/estudios/${studyId}/turno`)
+    } catch (failure) {
+      setBooking(false)
+      setBookingError(errorMessage(failure))
+      // Horario tomado por otro: se vuelven a pedir los horarios del día para que desaparezca.
+      if (failure.response?.status === 409) chooseDay(day)
+    }
   }
   function moveMonth(step) { const first = new Date(month.year, month.month + step, 1); setMonth({ year: first.getFullYear(), month: first.getMonth() }) }
 
@@ -144,7 +164,7 @@ export default function ReservarTurno({ session }) {
         : !slots ? <p role="status" className="turnos-loading">Cargando horarios...</p>
           : slots.holiday ? <p className="turnos-empty">Feriado: {slots.holiday}</p>
             : slots.slots.length === 0 ? <p className="turnos-empty">No hay turnos libres.</p>
-              : <div className="turnos-slots" role="group" aria-label="Horarios libres">{slots.slots.map((starts) => <button key={starts} type="button" className="turnos-slot" aria-pressed={starts === slot} onClick={() => setSlot(starts)}>{starts.slice(11, 16)}</button>)}</div>}</div>
+              : <div className="turnos-slots" role="group" aria-label="Horarios libres">{slots.slots.map((starts) => <button key={starts} type="button" className="turnos-slot" aria-pressed={starts === slot} onClick={() => chooseSlot(starts)}>{starts.slice(11, 16)}</button>)}</div>}</div>
     </section>}
 
     </div>
@@ -157,8 +177,10 @@ export default function ReservarTurno({ session }) {
         {/* La hora sale del ISO del back, que ya viene en hora de Argentina; así no depende de la zona del navegador. */}
         <dt>Hora</dt><dd>{slot ? `${slot.slice(11, 16)} h` : 'Sin elegir'}</dd>
       </dl>
-      <button type="button" className="turnos-primary" disabled aria-describedby="turnos-confirm-note">Confirmar turno</button>
-      <p id="turnos-confirm-note">Disponible cuando se habilite la reserva.</p>
+      {bookingError && <div role="alert" className="turnos-error turnos-booking-error"><p>{bookingError}</p></div>}
+      <button type="button" className="turnos-primary" disabled={!studyId || !slot || booking} onClick={confirm}
+        aria-describedby={studyId ? undefined : 'turnos-confirm-note'}>{booking ? 'Reservando...' : 'Confirmar turno'}</button>
+      {!studyId && <p id="turnos-confirm-note">Elegí el estudio para el que querés sacar turno.</p>}
     </aside>
     </div>
   </section></ClinicalLayout>

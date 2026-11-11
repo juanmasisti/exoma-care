@@ -44,13 +44,19 @@
 .turnos-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
 
 .turnos-summary { position: sticky; top: 24px; }
-.turnos-summary dl { margin: 0 0 20px; display: grid; gap: 4px; }
-.turnos-summary dt { font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; text-transform: uppercase; margin-top: 10px; }
-.turnos-summary dd { margin: 0; font-size: 13px; font-weight: 650; color: #0f172a; }
-.turnos-summary dd::first-letter { text-transform: uppercase; }
-.turnos-summary dd small { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: #64748b; }
+:is(.turnos-summary, .turnos-appointment) dl { margin: 0 0 20px; display: grid; gap: 4px; }
+:is(.turnos-summary, .turnos-appointment) dt { font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 1px; text-transform: uppercase; margin-top: 10px; }
+:is(.turnos-summary, .turnos-appointment) dd { margin: 0; font-size: 13px; font-weight: 650; color: #0f172a; }
+:is(.turnos-summary, .turnos-appointment) dd::first-letter { text-transform: uppercase; }
+:is(.turnos-summary, .turnos-appointment) dd small { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: #64748b; }
 .turnos-page .turnos-primary { width: 100%; color: #fff; border-color: #4f46e5; background: #4f46e5; }
 .turnos-summary > p { color: #64748b; font-size: 11px; text-align: center; margin: 10px 0 0; }
+.turnos-booking-error, .turnos-appointment .turnos-error { margin-bottom: 12px; }
+.turnos-appointment { max-width: 560px; }
+.turnos-note { font-size: 13px; color: #334155; padding: 12px 14px; border-radius: 8px; background: #f8fafc; margin: 0 0 20px; }
+.turnos-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
+.turnos-confirm p { flex-basis: 100%; margin: 0 0 4px; font-size: 13px; }
+.turnos-page .turnos-danger { color: #fff; border-color: #be123c; background: #be123c; }
 
 @media (max-width: 850px) {
   .turnos-page { padding: 20px 16px; }

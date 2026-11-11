@@ -22,8 +22,8 @@ from app.infrastructure.database import models, catalog_models, patient_clinical
 LOGISTICS_TABLES = {"provinces", "extraction_centers", "holidays"}
 FAMILY_TABLES = {"patient_family_records", "family_members", "family_member_symptoms", "family_member_diagnoses", "patient_family_revisions"}
 # Migraciones posteriores a 0005: esta herramienta solo llega a 0005; lo que sigue es alembic upgrade.
-REVISIONS_AFTER_0005 = {"0006"}
-TABLES_AFTER_0005 = {"studies"}
+REVISIONS_AFTER_0005 = {"0006", "0007"}
+TABLES_AFTER_0005 = {"studies", "appointments"}
 
 
 def _require_schema(connection, metadata):
