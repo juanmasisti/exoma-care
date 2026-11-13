@@ -54,18 +54,20 @@ class SQLAlchemyAppointmentRepository:
         return appointment.id
 
     def _select(self):
-        return (select(AppointmentModel, ExtractionCenterModel, StudyModel.patient_id, Paciente.usuario_id)
+        return (select(AppointmentModel, ExtractionCenterModel, Paciente)
                 .join(ExtractionCenterModel, ExtractionCenterModel.id == AppointmentModel.center_id)
                 .join(StudyModel, StudyModel.id == AppointmentModel.study_id)
                 .join(Paciente, Paciente.id == StudyModel.patient_id))
 
     @staticmethod
     def _record(row) -> dict:
-        appointment, center, patient_id, patient_user_id = row
+        appointment, center, patient = row
         return {"id": appointment.id, "study_id": appointment.study_id, "study_code": study_code(appointment.study_id),
                 "starts_at": appointment.starts_at.astimezone(TIMEZONE), "status": appointment.status,
                 "study_status_before": appointment.study_status_before,
-                "patient_id": patient_id, "patient_user_id": patient_user_id,
+                "patient_id": patient.id, "patient_user_id": patient.usuario_id,
+                # Para los documentos del turno; los endpoints de turnos no lo exponen.
+                "patient": {"first_name": patient.nombre, "last_name": patient.apellido, "dni": patient.dni},
                 "center": {"id": center.id, "name": center.name, "address": center.address,
                            "city": center.city, "phone": center.phone}}
 

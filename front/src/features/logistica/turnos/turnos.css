@@ -57,6 +57,8 @@
 .turnos-note { font-size: 13px; color: #334155; padding: 12px 14px; border-radius: 8px; background: #f8fafc; margin: 0 0 20px; }
 .turnos-confirm { display: flex; flex-wrap: wrap; gap: 8px; }
 .turnos-confirm p { flex-basis: 100%; margin: 0 0 4px; font-size: 13px; }
+.turnos-documents { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.turnos-documents p { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: #64748b; }
 .turnos-page .turnos-danger { color: #fff; border-color: #be123c; background: #be123c; }
 
 @media (max-width: 850px) {

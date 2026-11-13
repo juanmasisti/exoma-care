@@ -78,6 +78,14 @@ class AppointmentService:
             raise NotFound("El estudio no tiene un turno vigente.")
         return appointment
 
+    def turno_para_documentos(self, user_id: int, appointment_id: int) -> dict:
+        appointment = self.appointments.get(appointment_id)
+        if appointment is None or appointment["patient_user_id"] != user_id:
+            raise NotFound(APPOINTMENT_NOT_FOUND)
+        if appointment["status"] != AppointmentStatus.BOOKED.value:
+            raise AppointmentConflict("Los documentos solo están disponibles para un turno reservado.")
+        return appointment
+
     def mis_turnos(self, user_id: int) -> list[dict]:
         return self.appointments.booked_for_user(user_id)
 

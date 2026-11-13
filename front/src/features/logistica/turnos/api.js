@@ -22,3 +22,16 @@ export async function listMyAppointments() {
 export async function listEligibleStudies() {
   return (await api.get('/appointments/eligible-studies')).data
 }
+// Por axios y no con un link: el token viaja en el header Authorization.
+export async function downloadAppointmentDocument(appointmentId, kind) {
+  try {
+    return (await api.get(`/appointments/${appointmentId}/documents/${kind}`, { responseType: 'blob' })).data
+  } catch (failure) {
+    // Con responseType blob el error también llega como Blob: se lee para que errorMessage muestre el detail.
+    const body = failure.response?.data
+    if (body instanceof Blob) {
+      try { failure.response.data = JSON.parse(await body.text()) } catch { /* sin detail: queda el mensaje genérico */ }
+    }
+    throw failure
+  }
+}
