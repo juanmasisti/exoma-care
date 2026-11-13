@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./exoma_care.db"
     jwt_secret_key: SecretStr | None = None
+    recorridos_api_url: str = "https://optimizacionapi.vercel.app/api/optimizacion"
+    # Laboratorio Central (Calle 62 N° 555, La Plata): partida y destino del recorrido.
+    central_lab_latitude: float = -34.921559
+    central_lab_longitude: float = -57.938362
 
     @field_validator("jwt_secret_key", mode="before")
     @classmethod
