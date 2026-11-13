@@ -115,3 +115,36 @@ Pantalla: `npm test` y `npm run lint` desde `front` (Node `^20.19.0` o `>=22.12.
 pruebas están en `front/tests/turnos-*.test.mjs`, una por pantalla (la reserva en dos:
 horarios y confirmación), con el armado común en `front/tests/turnos-setup.mjs`, y fijan la
 fecha con `mock.timers`.
+
+## Recorridos (T04a, provisorio)
+
+Cliente del módulo de optimización de recorridos (módulo 9, de otro grupo). Detalle en la
+decisión `009-cliente-recorridos.md`.
+
+Configuración en `back/.env` (si falta, se usan estos valores):
+
+```
+RECORRIDOS_API_URL=https://optimizacionapi.vercel.app/api/optimizacion
+CENTRAL_LAB_LATITUDE=-34.921559
+CENTRAL_LAB_LONGITUDE=-57.938362
+```
+
+`POST /api/transport/route-preview`. Por ahora es para el rol `lab_administrator`, hasta que
+exista `transporter`. **Provisorio para la demo:** en T04 los centros salen de la orden del día.
+
+```json
+{"center_ids": [12, 3, 47]}
+```
+
+Devuelve los centros activos (con la misma forma que `GET /api/extraction-centers`) en el orden de
+visita. El recorrido sale del Laboratorio Central (Calle 62 N° 555, La Plata) y vuelve a él.
+
+| Caso | Respuesta |
+| --- | --- |
+| 0 o 1 centros | 200 con la misma lista, sin llamar al módulo |
+| Centro inexistente o inactivo | 404 |
+| Ids repetidos o más de 100 | 422 |
+| El módulo falla, tarda más de 5 s o devuelve un punto que no es de ningún centro | 502 con el motivo; no se arma ningún orden |
+| Sin token / otro rol | 401 / 403 |
+
+Pruebas: `tests/test_route_preview_api.py` (doble del módulo; no salen a internet).
