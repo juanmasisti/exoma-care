@@ -6,6 +6,7 @@ from app.api.routes.extraction_centers import router as extraction_center_router
 from app.api.routes.family import router as family_router
 from app.api.routes.pathologies import router as pathology_router
 from app.api.routes.patients import router as patient_router
+from app.api.routes.shipments import router as shipment_router
 from app.api.routes.transport import router as transport_router
 
 app = FastAPI(title="EXOMA CARE API")
@@ -16,3 +17,4 @@ app.include_router(family_router)
 app.include_router(extraction_center_router)
 app.include_router(appointment_router)
 app.include_router(transport_router)
+app.include_router(shipment_router)
