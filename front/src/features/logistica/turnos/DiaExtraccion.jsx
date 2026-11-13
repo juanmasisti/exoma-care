@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
-import { cancelAppointment, getStudyAppointment } from './api.js'
+import { cancelAppointment, downloadAppointmentDocument, getStudyAppointment } from './api.js'
 import { dateLabel, timeLabel } from './fecha.js'
 import './turnos.css'
 
@@ -17,6 +17,8 @@ export default function DiaExtraccion({ session }) {
   const [confirming, setConfirming] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
+  const [downloading, setDownloading] = useState(null)
+  const [downloadError, setDownloadError] = useState('')
   const bookingPath = `/paciente/turnos/reservar?estudio=${studyId}`
 
   useEffect(() => {
@@ -48,6 +50,21 @@ export default function DiaExtraccion({ session }) {
     }
   }
 
+  async function download(kind, fileName) {
+    setDownloading(kind); setDownloadError('')
+    try {
+      const url = URL.createObjectURL(await downloadAppointmentDocument(appointment.id, kind))
+      const link = Object.assign(document.createElement('a'), { href: url, download: `${fileName}-${appointment.study_code}.pdf` })
+      document.body.append(link); link.click(); link.remove()
+      // Se libera después del click: revocarla en el mismo paso puede cortar la descarga en algunos navegadores.
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+    } catch (failure) {
+      setDownloadError(errorMessage(failure))
+    } finally {
+      setDownloading(null)
+    }
+  }
+
   const center = appointment?.center
   return <ClinicalLayout session={session} pageLabel="Día de extracción"><section className="turnos-page">
     <header className="turnos-header"><h1>Día de extracción</h1><p>Tu turno para la extracción de sangre del estudio.</p></header>
@@ -63,6 +80,12 @@ export default function DiaExtraccion({ session }) {
               <dt>Centro</dt><dd>{center.name}<small>{center.address}, {center.city}</small>{center.phone && <small>Teléfono: {center.phone}</small>}</dd>
             </dl>
             <p className="turnos-note">No requiere ayuno ni preparación especial.</p>
+            <div className="turnos-documents" role="group" aria-label="Documentos del turno">
+              <button type="button" disabled={downloading !== null} onClick={() => download('order', 'orden')}>{downloading === 'order' ? 'Descargando...' : 'Descargar orden'}</button>
+              <button type="button" disabled={downloading !== null} onClick={() => download('consent', 'consentimiento')}>{downloading === 'consent' ? 'Descargando...' : 'Descargar consentimiento'}</button>
+              <p>Imprimí el consentimiento, firmalo y entregalo en papel.</p>
+            </div>
+            {downloadError && <div role="alert" className="turnos-error"><p>{downloadError}</p></div>}
             {cancelError && <div role="alert" className="turnos-error"><p>{cancelError}</p></div>}
             {started ? <p className="turnos-note">El turno ya empezó: no se puede cancelar.</p>
               : !confirming ? <button type="button" onClick={() => setConfirming(true)}>Cancelar turno</button>

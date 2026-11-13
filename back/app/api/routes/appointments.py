@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import AwareDatetime, BaseModel, ConfigDict, PositiveInt
@@ -10,6 +11,7 @@ from app.api.dependencies import get_database_session
 from app.api.routes.extraction_centers import get_clock
 from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
+from app.infrastructure.appointment_documents import consent_pdf, extraction_order_pdf
 from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
 from app.infrastructure.repositories.sqlalchemy_extraction_center_repository import SQLAlchemyExtractionCenterRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
@@ -19,6 +21,7 @@ from app.use_cases.studies import StudyService
 router = APIRouter(prefix="/api", tags=["turnos de extracción"])
 patient = require_roles(UserRole.PATIENT)
 lab_administrator = require_roles(UserRole.LAB_ADMINISTRATOR)
+DOCUMENTS = {"order": ("orden", extraction_order_pdf), "consent": ("consentimiento", consent_pdf)}
 
 
 def get_service(session: Session = Depends(get_database_session)):
@@ -118,3 +121,14 @@ def register_attendance(appointment_id: PositiveInt, body: AttendanceRequest,
                         service: AppointmentService = Depends(get_service)):
     with http_errors():
         return service.registrar_asistencia(appointment_id, body.attended)
+
+
+@router.get("/appointments/{appointment_id}/documents/{kind}", response_class=Response,
+            responses={200: {"content": {"application/pdf": {}}}})
+def appointment_document(appointment_id: PositiveInt, kind: Literal["order", "consent"],
+                         actor: AuthenticatedUser = Depends(patient), service: AppointmentService = Depends(get_service)):
+    with http_errors():
+        appointment = service.turno_para_documentos(actor.id, appointment_id)
+    name, render = DOCUMENTS[kind]
+    return Response(render(appointment), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}-{appointment["study_code"]}.pdf"'})

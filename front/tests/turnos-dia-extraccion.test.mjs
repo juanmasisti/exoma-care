@@ -1,8 +1,8 @@
-// Día de extracción: tarjeta del turno y cancelación.
+// Día de extracción: tarjeta del turno, documentos y cancelación.
 import assert from 'node:assert/strict'
 import { mock, test } from 'node:test'
 import { act } from 'react'
-import { BEFORE_APPOINTMENT, button, calls, container, crumb, fake, province, render, settle } from './turnos-setup.mjs'
+import { BEFORE_APPOINTMENT, button, calls, container, crumb, dom, fake, province, render, settle } from './turnos-setup.mjs'
 
 test('cancelar el turno pide confirmación y vuelve a la reserva del mismo estudio',async()=>{
   mock.timers.setTime(BEFORE_APPOINTMENT)
@@ -74,4 +74,37 @@ test('la miga de pan del día de extracción cuelga de Mis turnos',async()=>{
   await render('/paciente/estudios/7/turno')
   assert.equal(crumb(),'Exoma CareMis turnosDía de extracción')
   assert.ok(container.querySelector('.clinical-breadcrumb a[href="/paciente/turnos"]'))
+})
+
+// El navegador no descarga en happy-dom: se registra qué enlace se clickeó.
+function captureDownloads(t) {
+  const clicked=[]
+  t.mock.method(URL,'createObjectURL',()=>'blob:demo')
+  t.mock.method(URL,'revokeObjectURL',()=>{})
+  t.mock.method(dom.HTMLAnchorElement.prototype,'click',function(){ clicked.push({href:this.getAttribute('href'),download:this.download}) })
+  return clicked
+}
+
+test('los botones descargan la orden y el consentimiento por la API con el token',async(t)=>{
+  fake.booked=true
+  await render('/paciente/estudios/7/turno')
+  const clicked=captureDownloads(t)
+  await act(async()=>button('Descargar orden').click());await settle()
+  await act(async()=>button('Descargar consentimiento').click());await settle()
+  const documents=calls.filter((c)=>c.url.includes('/documents/'))
+  assert.deepEqual(documents.map((c)=>[c.method,c.url,c.responseType,c.authorization]),
+    [['get','/appointments/55/documents/order','blob','Bearer test-token'],['get','/appointments/55/documents/consent','blob','Bearer test-token']])
+  assert.deepEqual(clicked,[{href:'blob:demo',download:'orden-EST-000007.pdf'},{href:'blob:demo',download:'consentimiento-EST-000007.pdf'}])
+  assert.equal(container.querySelector('.turnos-appointment [role="alert"]'),null)
+})
+
+test('si el back rechaza la descarga, se muestra su mensaje',async(t)=>{
+  fake.booked=true
+  fake.documentRejected=true
+  await render('/paciente/estudios/7/turno')
+  const clicked=captureDownloads(t)
+  await act(async()=>button('Descargar orden').click());await settle()
+  assert.equal(container.querySelector('.turnos-appointment [role="alert"]').textContent,'Los documentos solo están disponibles para un turno reservado.')
+  assert.deepEqual(clicked,[])
+  assert.equal(button('Descargar orden').disabled,false)
 })

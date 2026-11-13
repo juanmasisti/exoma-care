@@ -53,11 +53,11 @@ beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT=true
   container=document.createElement('div');document.body.append(container);root=createRoot(container)
   calls=[]
-  Object.assign(fake,{networkDown:false,slowDay:null,taken:new Set(),slotTaken:false,studyTaken:false,booked:false,cancelRejected:false,
+  Object.assign(fake,{networkDown:false,slowDay:null,taken:new Set(),slotTaken:false,studyTaken:false,booked:false,cancelRejected:false,documentRejected:false,
     eligible:[{id:7,code:'EST-000007',status:'pagado'}],myAppointments:[]})
   mock.timers.enable({apis:['Date'],now:WEDNESDAY_10})
   api.defaults.adapter=async (config) => {
-    calls.push({url:config.url,method:config.method,params:config.params,data:config.data&&JSON.parse(config.data)})
+    calls.push({url:config.url,method:config.method,params:config.params,data:config.data&&JSON.parse(config.data),responseType:config.responseType,authorization:config.headers?.Authorization})
     if(fake.networkDown) throw new AxiosError('Network Error','ERR_NETWORK',config)
     let data
     if(config.url==='/provinces') data=provinces
@@ -84,6 +84,14 @@ beforeEach(() => {
       if(fake.cancelRejected) throw failure(config,409,'Conflict','No se puede cancelar un turno que ya empezó.')
       fake.booked=false
       return {data:'',status:204,statusText:'No Content',headers:{},config}
+    }
+    else if(/^\/appointments\/55\/documents\/(order|consent)$/.test(config.url)) {
+      // Como axios con responseType blob: el cuerpo del error también es un Blob.
+      if(fake.documentRejected) {
+        const body=new Blob([JSON.stringify({detail:'Los documentos solo están disponibles para un turno reservado.'})],{type:'application/json'})
+        throw new AxiosError('Request failed with status code 409','ERR_BAD_REQUEST',config,null,{status:409,statusText:'Conflict',headers:{},config,data:body})
+      }
+      data=new Blob(['%PDF-DEMO'],{type:'application/pdf'})
     }
     else if(config.url==='/appointments/mine') data=fake.myAppointments
     else if(config.url==='/studies/999/appointment') throw failure(config,404,'Not Found','El estudio no existe o no es tuyo.')
