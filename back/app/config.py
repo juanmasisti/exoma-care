@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     # Laboratorio Central (Calle 62 N° 555, La Plata): partida y destino del recorrido.
     central_lab_latitude: float = -34.921559
     central_lab_longitude: float = -57.938362
+    # Secreto compartido con el bot de extracción (header X-Webhook-Secret). Sin valor, el webhook rechaza todo.
+    extraction_webhook_secret: SecretStr | None = None
+
+    @field_validator("extraction_webhook_secret", mode="before")
+    @classmethod
+    def empty_webhook_secret_is_none(cls, value):
+        return None if value == "" else value
 
     @field_validator("jwt_secret_key", mode="before")
     @classmethod

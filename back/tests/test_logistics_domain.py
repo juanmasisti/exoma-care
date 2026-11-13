@@ -4,8 +4,9 @@ from decimal import Decimal
 import pytest
 
 from app.domain.entities.logistics import (
-    TIMEZONE, AppointmentStatus, SampleStatus, _easter, available_slots, can_change_appointment, can_change_sample,
-    daily_slots, fixed_national_holidays, is_valid_slot, sample_is_usable, study_code, study_id_from_code,
+    SAMPLE_TRANSITIONS, TIMEZONE, AppointmentStatus, SampleStatus, _easter, available_slots, can_change_appointment,
+    can_change_sample, daily_slots, fixed_national_holidays, initial_sample_status, is_valid_slot, sample_is_usable,
+    study_code, study_id_from_code,
 )
 
 MONDAY = date(2026, 11, 2)
@@ -98,6 +99,16 @@ def test_study_id_from_invalid_code_is_none(code):
 @pytest.mark.parametrize("volume, usable", [("1.9", False), ("1.99", False), ("2.0", True), ("2", True), ("5.5", True)])
 def test_sample_needs_at_least_2_ml(volume, usable):
     assert sample_is_usable(Decimal(volume)) is usable
+
+
+@pytest.mark.parametrize("volume, status", [("1.9", SampleStatus.DISCARDED), ("2.0", SampleStatus.READY_FOR_PICKUP)])
+def test_sample_is_born_ready_or_discarded_by_volume(volume, status):
+    assert initial_sample_status(Decimal(volume)) is status
+
+
+def test_being_born_discarded_is_not_a_transition():
+    # Nace descartada (caso 1.9 de arriba) sin pasar por una transición, y de descartada no se sale.
+    assert SampleStatus.DISCARDED not in SAMPLE_TRANSITIONS
 
 
 def test_sample_moves_forward_in_order():

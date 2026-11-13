@@ -143,3 +143,12 @@ MIN_SAMPLE_VOLUME_ML = Decimal("2")
 def sample_is_usable(volume_ml: Decimal) -> bool:
     """Menos de 2 ml obliga a remuestrear."""
     return volume_ml >= MIN_SAMPLE_VOLUME_ML
+
+
+def initial_sample_status(volume_ml: Decimal) -> SampleStatus:
+    """Estado con el que nace la muestra al llegar el aviso de extracción.
+
+    Crearla no es una transición: con menos de 2 ml nace descartada, sin pasar por
+    ready_for_pickup. SAMPLE_TRANSITIONS solo rige los cambios de una muestra que ya existe.
+    """
+    return SampleStatus.READY_FOR_PICKUP if sample_is_usable(volume_ml) else SampleStatus.DISCARDED
