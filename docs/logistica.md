@@ -115,3 +115,35 @@ Pantalla: `npm test` y `npm run lint` desde `front` (Node `^20.19.0` o `>=22.12.
 pruebas están en `front/tests/turnos-*.test.mjs`, una por pantalla (la reserva en dos:
 horarios y confirmación), con el armado común en `front/tests/turnos-setup.mjs`, y fijan la
 fecha con `mock.timers`.
+
+## Documentos del turno (T02b)
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| GET /api/appointments/{id}/documents/{kind} | `patient` | PDF de un turno propio reservado. `kind`: `order` (orden de extracción) o `consent` (consentimiento informado) |
+
+Responde `application/pdf` con `Content-Disposition: attachment` y el nombre
+`orden-EST-000001.pdf` o `consentimiento-EST-000001.pdf`. El PDF se genera en el momento
+con `fpdf2` y no se guarda.
+
+- Orden de extracción: código del estudio, fecha y hora en hora argentina, nombre y dirección
+  del centro, nombre, apellido y DNI del paciente, y "No requiere ayuno ni preparación especial".
+- Consentimiento informado: **texto PROVISORIO** y genérico con los datos del paciente y del
+  estudio, aviso para menores (firma madre, padre o tutor) y líneas de firma. Se imprime, se
+  firma y se entrega en papel; no se sube al sistema.
+
+Errores:
+- 401: sin sesión.
+- 403: rol no permitido.
+- 404: el turno no existe o es de otro paciente.
+- 409: el turno no está reservado (cancelado, asistido o ausente).
+- 422: `kind` distinto de `order` o `consent`.
+
+En "Día de extracción" (`/paciente/estudios/ID/turno`), los botones "Descargar orden" y
+"Descargar consentimiento" piden el PDF con `api` (axios, `responseType: 'blob'`), porque el
+token viaja en el header `Authorization` y un enlace directo no lo manda. Si el back rechaza
+la descarga, la pantalla muestra su mensaje.
+
+Pruebas: `back/tests/test_appointments_documents.py` (contenido de los PDF, hora argentina y
+permisos) y `front/tests/turnos-dia-extraccion.test.mjs`. Detalles y pendientes en la
+[decisión 010](decisiones/010-documentos-del-turno.md).

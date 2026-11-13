@@ -1,4 +1,4 @@
-"""PDF de la orden de extracción y del consentimiento informado de un turno (decisión 009)."""
+"""PDF de la orden de extracción y del consentimiento informado de un turno (decisión 010)."""
 from fpdf import FPDF
 
 # Cada bloque de texto termina en el margen izquierdo de la línea siguiente.
@@ -53,7 +53,7 @@ def extraction_order_pdf(appointment: dict) -> bytes:
 def consent_pdf(appointment: dict) -> bytes:
     pdf = _document("Consentimiento informado (PROVISORIO)")
     pdf.set_font("Helvetica", "I", 10)
-    # ABIERTO (decisión 009): el PO tiene una plantilla; este texto se reemplaza por la suya.
+    # ABIERTO (decisión 010): el PO tiene una plantilla; este texto se reemplaza por la suya.
     pdf.multi_cell(0, 6, "Texto provisorio: se reemplaza por la plantilla del laboratorio.", **NEXT_LINE)
     pdf.ln(4)
     pdf.set_font("Helvetica", size=11)
