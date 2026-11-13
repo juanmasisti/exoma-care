@@ -1,7 +1,9 @@
-"""Centros de extracción tercerizados, sus provincias, los feriados y los turnos del turnero."""
+"""Centros de extracción tercerizados, sus provincias, los feriados, los turnos del turnero y las muestras."""
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, String, TypeDecorator, UniqueConstraint, text, true
+from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Numeric, String, TypeDecorator,
+                        UniqueConstraint, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.session import Base
@@ -81,3 +83,45 @@ class AppointmentModel(Base):
     study_status_before: Mapped[str] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=lambda: datetime.now(UTC))
     cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class ExtractionNoticeModel(Base):
+    """Aviso del bot de extracción tal como llegó; `external_id` único da la idempotencia."""
+    __tablename__ = "extraction_notices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(100), unique=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    received_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+CURRENT_ONLY = text("is_current")
+
+
+class SampleModel(Base):
+    __tablename__ = "samples"
+    # Una sola muestra vigente por estudio; las descartadas quedan como historial.
+    __table_args__ = (
+        Index("uq_samples_study_current", "study_id", unique=True,
+              sqlite_where=CURRENT_ONLY, postgresql_where=CURRENT_ONLY),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    study_id: Mapped[int] = mapped_column(ForeignKey("studies.id"))
+    appointment_id: Mapped[int] = mapped_column(ForeignKey("appointments.id"))
+    extraction_notice_id: Mapped[int] = mapped_column(ForeignKey("extraction_notices.id"), unique=True)
+    volume_ml: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    status: Mapped[str] = mapped_column(String(30))
+    is_current: Mapped[bool] = mapped_column(Boolean)
+
+
+class SampleEventModel(Base):
+    __tablename__ = "sample_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sample_id: Mapped[int] = mapped_column(ForeignKey("samples.id"))
+    from_status: Mapped[str | None] = mapped_column(String(30))  # None al crear la muestra
+    to_status: Mapped[str] = mapped_column(String(30))
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # None: lo hizo el bot
+    reason: Mapped[str | None] = mapped_column(String(500))  # motivo del remuestreo
+    at: Mapped[datetime] = mapped_column(UTCDateTime)
