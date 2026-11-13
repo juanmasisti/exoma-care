@@ -213,3 +213,86 @@ autoriza y devuelve un PDF con las filas del CSV. Lo usa T06.
 Pruebas: `back/tests/test_shipment_clients.py` (doble de `Courier`, reloj fijo y
 `httpx.MockTransport`; no salen a internet). Detalles en la
 [decisión 012](decisiones/012-clientes-envio.md).
+
+## Extracción y remuestreo (T03)
+
+| Método y ruta | Quién | Función |
+| --- | --- | --- |
+| POST /api/webhooks/extraction | El bot de extracción (sin usuario), con `X-Webhook-Secret` | Aviso de que el centro tomó la muestra |
+| GET /api/studies/{id}/tracking | `patient` | Seguimiento de un estudio propio: muestras, historial y si requiere nueva extracción |
+
+### Aviso de extracción
+
+El bot no es un usuario del sistema: no manda token ni tiene rol. Se autentica con el secreto
+compartido del header `X-Webhook-Secret`, que se compara con `EXTRACTION_WEBHOOK_SECRET` de
+`back/.env`. Sin ese valor configurado, el webhook rechaza todo.
+
+```json
+{"external_id": "bot-123", "study_code": "EST-000001", "volume_ml": 2.5, "taken_at": "2026-11-13T10:15:00-03:00"}
+```
+
+- `external_id`: id del aviso en el bot (1 a 100 caracteres). Un aviso con el mismo id
+  devuelve el mismo resultado sin duplicar nada.
+- `study_code`: el código impreso en la orden de extracción (PROVISORIO, `EST-` + id).
+- `volume_ml`: mililitros del tubo. Mayor que 0, finito, hasta 999,99 y con 2 decimales como
+  máximo (1,999 se rechaza en vez de redondearse a 2,00).
+- `taken_at`: fecha y hora de la extracción, con zona horaria.
+
+Qué hace, todo en una transacción:
+
+1. El estudio tiene que estar en `turno_sacado`.
+2. El turno `booked` del estudio pasa a `attended`: el aviso prueba que el paciente fue. Si ya
+   estaba `attended`, se usa ese.
+3. Se crea la muestra vinculada al turno y al aviso:
+   - 2 ml o más: `ready_for_pickup` y vigente; el estudio pasa a `listo_para_retirar`.
+   - Menos de 2 ml: nace `discarded`, no vigente; el estudio pasa a `requiere_remuestreo` y se
+     avisa a paciente y médico (PROVISORIO: hoy solo queda en el log).
+
+Respuesta: 201 con `{"sample_id": 1, "sample_status": "ready_for_pickup", "study_status": "listo_para_retirar"}`.
+Aviso repetido: 200 con el resultado de la primera vez.
+
+Errores:
+- 401: falta el secreto, no coincide o no está configurado (antes de validar los campos; un
+  JSON mal formado da 422, ver decisión 011).
+- 404: código con otra forma que `EST-000001` o estudio inexistente.
+- 409: el estudio no está en `turno_sacado`; el último turno está `absent` o no hay turno;
+  el turno cambió a la vez (por ejemplo, el paciente lo canceló); el estudio ya tiene una
+  muestra vigente.
+- 422: cuerpo inválido (volumen NaN, infinito, 0 o negativo; fecha sin zona; código vacío o
+  de más de 20 caracteres).
+
+Un aviso rechazado no queda guardado: el bot puede reintentarlo con el mismo `external_id`.
+
+### Remuestreo
+
+Por volumen insuficiente lo dispara el aviso. Por ADN insuficiente o desnaturalizado
+(después de Corea), bioinformática llama al caso de uso
+`ExtractionService.solicitar_remuestreo(study_id, motivo, now, actor_id=None)`; no hay
+endpoint. La muestra vigente pasa a `discarded` y deja de ser vigente, el motivo queda en el
+historial y el estudio pasa a `requiere_remuestreo`.
+
+En los dos casos es **el mismo estudio** y **no se toca el pago**: `requiere_remuestreo`
+habilita a sacar un turno nuevo, y el aviso de ese turno crea la muestra vigente nueva. Las
+anteriores quedan en el historial.
+
+### Seguimiento
+
+`GET /api/studies/{id}/tracking` devuelve `study_id`, `code`, `status`,
+`requires_new_extraction` y `samples` (cada una con `id`, `volume_ml`, `status`, `is_current` y
+sus `events`: `from_status`, `to_status`, `reason`, `at` en hora argentina). 401 sin sesión, 403
+con otro rol, 404 si el estudio no existe o es de otro paciente. La pantalla del paso 5 va en T03b.
+
+### Simulación del bot
+
+Ningún grupo tiene el bot: `back/scripts/simular_aviso_extraccion.py` (`SimulatedExtractionBot`)
+hace el mismo POST que haría el bot real, con un `external_id` nuevo y la hora actual. Solo el
+camino feliz. Con el back levantado y `EXTRACTION_WEBHOOK_SECRET` en `back/.env`, desde `back`:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head   # 0008
+.\.venv\Scripts\python.exe -m scripts.simular_aviso_extraccion EST-000001 2.5
+```
+
+Pruebas: `back/tests/test_extraction_api.py`, `back/tests/test_logistics_domain.py` y
+`back/tests/test_migrations.py` (índice parcial de la `0008`).
+Detalles y pendientes en la [decisión 011](decisiones/011-extraccion-y-remuestreo.md).

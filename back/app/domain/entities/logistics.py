@@ -1,5 +1,7 @@
-"""Reglas puras de logística: días hábiles, feriados fijos, horarios y estados de turnos de extracción."""
+"""Reglas puras de logística: días hábiles, feriados fijos, horarios, estados de turnos y de muestras."""
+import re
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -84,6 +86,17 @@ def study_code(study_id: int) -> str:
     return f"EST-{study_id:06d}"
 
 
+def study_id_from_code(code: str) -> int | None:
+    """Inversa de `study_code`; None si el código no tiene esa forma."""
+    # [0-9] y no \d: el código llega de afuera y \d acepta dígitos de cualquier alfabeto.
+    match = re.fullmatch(r"EST-([0-9]{6,})", code)
+    if match is None:
+        return None
+    study_id = int(match.group(1))
+    # Regenerarlo descarta ceros de más (EST-0000001) y EST-000000.
+    return study_id if study_id > 0 and study_code(study_id) == code else None
+
+
 class AppointmentStatus(str, Enum):
     BOOKED = "booked"
     CANCELLED = "cancelled"
@@ -99,3 +112,43 @@ APPOINTMENT_TRANSITIONS = {
 
 def can_change_appointment(current: AppointmentStatus, new: AppointmentStatus) -> bool:
     return new in APPOINTMENT_TRANSITIONS.get(current, set())
+
+
+class SampleStatus(str, Enum):
+    READY_FOR_PICKUP = "ready_for_pickup"
+    WITH_TRANSPORTER = "with_transporter"
+    RECEIVED = "received"
+    IN_SAMPLE_SET = "in_sample_set"
+    IN_TRANSIT_TO_KOREA = "in_transit_to_korea"
+    DISCARDED = "discarded"
+
+
+# En orden; se descarta para remuestrear desde lista para retirar, recibida o en viaje a Corea.
+SAMPLE_TRANSITIONS = {
+    SampleStatus.READY_FOR_PICKUP: {SampleStatus.WITH_TRANSPORTER, SampleStatus.DISCARDED},
+    SampleStatus.WITH_TRANSPORTER: {SampleStatus.RECEIVED},
+    SampleStatus.RECEIVED: {SampleStatus.IN_SAMPLE_SET, SampleStatus.DISCARDED},
+    SampleStatus.IN_SAMPLE_SET: {SampleStatus.IN_TRANSIT_TO_KOREA},
+    SampleStatus.IN_TRANSIT_TO_KOREA: {SampleStatus.DISCARDED},
+}
+
+
+def can_change_sample(current: SampleStatus, new: SampleStatus) -> bool:
+    return new in SAMPLE_TRANSITIONS.get(current, set())
+
+
+MIN_SAMPLE_VOLUME_ML = Decimal("2")
+
+
+def sample_is_usable(volume_ml: Decimal) -> bool:
+    """Menos de 2 ml obliga a remuestrear."""
+    return volume_ml >= MIN_SAMPLE_VOLUME_ML
+
+
+def initial_sample_status(volume_ml: Decimal) -> SampleStatus:
+    """Estado con el que nace la muestra al llegar el aviso de extracción.
+
+    Crearla no es una transición: con menos de 2 ml nace descartada, sin pasar por
+    ready_for_pickup. SAMPLE_TRANSITIONS solo rige los cambios de una muestra que ya existe.
+    """
+    return SampleStatus.READY_FOR_PICKUP if sample_is_usable(volume_ml) else SampleStatus.DISCARDED

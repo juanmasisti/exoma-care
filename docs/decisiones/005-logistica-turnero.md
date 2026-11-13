@@ -223,6 +223,8 @@ Camila y no se tocó).
   extracción lo cambia entre esa lectura y esa escritura, el estudio retrocedería. Cuando
   exista T03, la escritura tendría que exigir el estado anterior (`WHERE status =
   'turno_sacado'`) y responder 409 si no actualiza ninguna fila. Coordinarlo con Tomás.
+  **Resuelto en la [decisión 011](011-extraccion-y-remuestreo.md)** sin tocar estudios: el aviso
+  y la cancelación pasan el turno por la misma actualización condicional y gana uno solo.
 - Quién carga cada año los feriados trasladables, los puentes y los feriados fijos de los
   años siguientes (hoy: volver a correr el seed y cargar el resto a mano).
 - Con cuánta anticipación máxima se puede pedir turno. Las fuentes no lo indican, así que

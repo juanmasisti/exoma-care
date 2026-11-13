@@ -39,9 +39,10 @@ def service(session):
 
 
 @pytest.mark.parametrize("status, enabled", [
-    ("pagado", True), ("autorizado", True), ("pendiente_pago", False), ("creado", False), ("rechazado", False),
+    ("pagado", True), ("autorizado", True), ("requiere_remuestreo", True), ("pendiente_pago", False),
+    ("creado", False), ("rechazado", False),
 ])
-def test_study_is_enabled_only_when_paid_or_authorized(factory, status, enabled):
+def test_study_is_enabled_when_paid_authorized_or_requiring_resample(factory, status, enabled):
     study_id = add_study(factory, status)
     with factory() as session:
         assert service(session).estudio_habilitado(study_id) is enabled

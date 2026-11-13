@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     fedex_url: str | None = None
     fedex_user: str | None = None
     fedex_pass: SecretStr | None = None
+    # Secreto compartido con el bot de extracción (header X-Webhook-Secret). Sin valor, el webhook rechaza todo.
+    extraction_webhook_secret: SecretStr | None = None
+
+    @field_validator("extraction_webhook_secret", mode="before")
+    @classmethod
+    def empty_webhook_secret_is_none(cls, value):
+        return None if value == "" else value
 
     @field_validator("jwt_secret_key", mode="before")
     @classmethod
