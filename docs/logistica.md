@@ -180,3 +180,36 @@ la descarga, la pantalla muestra su mensaje.
 Pruebas: `back/tests/test_appointments_documents.py` (contenido de los PDF, hora argentina y
 permisos) y `front/tests/turnos-dia-extraccion.test.mjs`. Detalles y pendientes en la
 [decisión 010](decisiones/010-documentos-del-turno.md).
+
+## Clientes del envío a Corea (T06a)
+
+**PROVISORIO para la demo:** en T06 estos endpoints se reemplazan por el flujo del lote
+(CSV, autorización del Ministerio, día hábil de 9 a 18 y estado `awaiting_pickup`).
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| POST /api/shipments/pickups | `lab_administrator` | Programa un retiro de FedEx en el Laboratorio Central. Cuerpo `{"scheduled_at": "2026-12-15T15:00:00-03:00"}`; responde **201** `{"pickup_id": "<uuid>"}` |
+| GET /api/shipments/pickups/{pickup_id} | `lab_administrator` | Consulta el retiro en FedEx; responde `{"pickup_id", "status"}` con `status` `PROGRAMADO` o `RETIRADO` |
+
+- `scheduled_at` lleva zona horaria (`Z` u offset). Se le manda a FedEx en hora argentina
+  sin zona (`logistics.TIMEZONE`), como pide su contrato.
+- El lugar es `CENTRAL_LAB_ADDRESS` (por defecto "Laboratorio Central, Calle 62 N° 555, La Plata").
+
+Errores:
+
+| Caso | Respuesta |
+| --- | --- |
+| Fecha sin zona horaria, fecha pasada o igual a ahora, `pickup_id` que no es UUID | 422 (la fecha pasada se rechaza **sin llamar a FedEx**) |
+| FedEx responde 400, 401, 404 o 5xx, tarda más de 5 s, no contesta o responde algo mal formado | 502 con el motivo en español (incluye el `error` de FedEx si viene) |
+| Falta `FEDEX_URL`, `FEDEX_USER` o `FEDEX_PASS` | 502 "FedEx no está configurado." |
+| Sin token / otro rol | 401 / 403 |
+
+Configuración en `back/.env` (nunca en el repo): `FEDEX_URL` (URL base del módulo 10),
+`FEDEX_USER` y `FEDEX_PASS` (credenciales del grupo, Basic Auth).
+
+El Ministerio de Salud no tiene endpoint: `SimulatedHealthMinistry` (SIMULADO) siempre
+autoriza y devuelve un PDF con las filas del CSV. Lo usa T06.
+
+Pruebas: `back/tests/test_shipment_clients.py` (doble de `Courier`, reloj fijo y
+`httpx.MockTransport`; no salen a internet). Detalles en la
+[decisión 012](decisiones/012-clientes-envio.md).

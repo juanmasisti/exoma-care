@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     # Laboratorio Central (Calle 62 N° 555, La Plata): partida y destino del recorrido.
     central_lab_latitude: float = -34.921559
     central_lab_longitude: float = -57.938362
+    # Lugar donde FedEx retira los lotes.
+    central_lab_address: str = "Laboratorio Central, Calle 62 N° 555, La Plata"
+    # API de FedEx (módulo 10, otro grupo). Credenciales del grupo solo en .env.
+    fedex_url: str | None = None
+    fedex_user: str | None = None
+    fedex_pass: SecretStr | None = None
 
     @field_validator("jwt_secret_key", mode="before")
     @classmethod
