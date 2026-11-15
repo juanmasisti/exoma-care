@@ -15,4 +15,5 @@ class ExtractionCenterService:
         holiday = self.centers.holiday(day)
         holidays = {day} if holiday is not None else set()
         return {"center_id": center_id, "date": day, "business_day": is_business_day(day, holidays),
-                "holiday": holiday, "slots": available_slots(day, holidays, now)}
+                "holiday": holiday,
+                "slots": available_slots(day, holidays, now, self.centers.booked_starts(center_id, day))}

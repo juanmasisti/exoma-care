@@ -150,3 +150,17 @@ El chatbot no exige migraciones propias. Otros módulos integrados en develop pu
 - **¿Por qué hay dos JWT?** Uno autentica la sesión; el otro protege la referencia de conversación, con propósito y validación diferentes.
 
 Referencias: [decisión vigente](decisiones/ec21-integracion-genlab.md), [preparación histórica](decisiones/ec21-preparacion-chatbot.md), contrato privado GenLab entregado al grupo 6 y entrevista corregida (apartado chatbot).
+
+## Verificación de publicación (15/11/2026)
+
+- Antes de integrar develop: suite backend, 164 pruebas aprobadas.
+- Con develop 5fd69e8 integrado: frontend, 102 pruebas aprobadas; lint y compilación correctos.
+- La suite backend combinada quedó bloqueada en la recolección por falta de fpdf2, dependencia incorporada por logística. La descarga desde files.pythonhosted.org fue rechazada por conexión; no se presenta esa suite como aprobada.
+- Para completar la comprobación desde back en Git Bash:
+
+```bash
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+./.venv/Scripts/python.exe -m pytest -q
+```
+
+Antes de iniciar el backend actualizado es necesario instalar esa dependencia. El script dev.sh no instala paquetes ni migra la base. Seguir la preparación de logística para sus migraciones; esta publicación no modificó la base local.

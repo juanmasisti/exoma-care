@@ -1,4 +1,4 @@
-import { BookOpen, CalendarClock, ChevronRight, Dna, LogOut, MessageCircle, ShieldCheck, Stethoscope, Users } from 'lucide-react'
+import { BookOpen, CalendarCheck, CalendarClock, ChevronRight, Dna, LogOut, MessageCircle, ShieldCheck, Stethoscope, Users } from 'lucide-react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { setSession } from '../../services/session.js'
 import './ClinicalLayout.css'
@@ -10,8 +10,10 @@ export default function ClinicalLayout({ session, children, pageLabel }) {
   const location = useLocation()
   const patientsArea = location.pathname.startsWith('/medico/pacientes')
   const chatArea = location.pathname.startsWith('/paciente/consultas')
-  const viewLabel = patient ? (chatArea ? 'Consultas' : 'Reservar turno') : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
+  const myAppointmentsArea = location.pathname === '/paciente/turnos' || location.pathname.startsWith('/paciente/estudios/')
+  const viewLabel = patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
   const home = patient ? '/paciente/turnos/reservar' : manager ? '/catalogo/patologias' : '/medico/pacientes'
+  const viewPath = patient ? (chatArea ? '/paciente/consultas' : myAppointmentsArea ? '/paciente/turnos' : home) : patientsArea ? '/medico/pacientes' : '/catalogo/patologias'
 
   return <div className="clinical-shell">
     <a className="clinical-skip-link" href="#clinical-content">Ir al contenido</a>
@@ -24,7 +26,10 @@ export default function ClinicalLayout({ session, children, pageLabel }) {
       <nav className="clinical-navigation" aria-label="Navegación clínica">
         <p>{patient ? 'PORTAL DEL PACIENTE' : manager ? 'GESTIÓN MÉDICA' : 'CONSULTA CLÍNICA'}</p>
         {patient && <NavLink to="/paciente/consultas" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
-          <MessageCircle size={19} aria-hidden="true" /><span><strong>Consultas</strong><small>Orientación sobre patologías</small></span><ChevronRight size={15} aria-hidden="true" />
+          <MessageCircle size={19} aria-hidden="true" /><span><strong>Consultas</strong><small>Estudios genéticos y patologías</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {patient && <NavLink to="/paciente/turnos" end className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <CalendarCheck size={19} aria-hidden="true" /><span><strong>Mis turnos</strong><small>Turnos reservados</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
         {patient && <NavLink to="/paciente/turnos/reservar" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <CalendarClock size={19} aria-hidden="true" /><span><strong>Reservar turno</strong><small>Centro, fecha y horario</small></span><ChevronRight size={15} aria-hidden="true" />
@@ -46,7 +51,7 @@ export default function ClinicalLayout({ session, children, pageLabel }) {
     </aside>
     <div className="clinical-workspace">
       <header className="clinical-topbar">
-        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={patient ? (chatArea ? '/paciente/consultas' : home) : patientsArea ? "/medico/pacientes" : "/catalogo/patologias"}>{viewLabel}</Link>{pageLabel && pageLabel !== viewLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
+        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={viewPath}>{viewLabel}</Link>{pageLabel && pageLabel !== viewLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
         <button type="button" className="clinical-logout" onClick={() => setSession(null)}><LogOut size={15} aria-hidden="true" /><span>Cerrar sesión</span></button>
       </header>
       <main id="clinical-content" className="clinical-main" tabIndex={-1}>{children}</main>

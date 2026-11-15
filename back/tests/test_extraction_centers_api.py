@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.dependencies import get_database_session
 from app.api.routes.extraction_centers import get_clock
 from app.domain.entities.logistics import TIMEZONE
-from app.infrastructure.database.logistics_models import ExtractionCenterModel, ProvinceModel
-from app.infrastructure.database.models import Usuario
+from app.infrastructure.database.logistics_models import AppointmentModel, ExtractionCenterModel, ProvinceModel
+from app.infrastructure.database.models import Paciente, Usuario
+from app.infrastructure.database.study_models import StudyModel
 from app.infrastructure.database.security import hash_password
 from app.infrastructure.database.seed_demo_extraction_centers import seed_demo_extraction_centers
 from app.infrastructure.database.session import Base
@@ -110,6 +111,44 @@ def test_slots_already_started_are_not_offered(client):
     app.dependency_overrides[get_clock] = lambda: datetime(2026, 11, 2, 12, 5, tzinfo=TIMEZONE)
     response = http.get("/api/extraction-centers/1/slots", headers=login(http), params={"date": MONDAY})
     assert response.json()["slots"][0] == "2026-11-02T12:15:00-03:00"
+
+
+def add_appointment(engine, starts_at, status="booked"):
+    with Session(engine) as session:
+        patient = Paciente(dni="45000001", nombre="Sofía", apellido="DEMO")
+        session.add(patient)
+        session.flush()
+        study = StudyModel(patient_id=patient.id, status="turno_sacado")
+        session.add(study)
+        session.flush()
+        appointment = AppointmentModel(study_id=study.id, center_id=1, starts_at=starts_at, status=status,
+                                       study_status_before="pagado")
+        session.add(appointment)
+        session.commit()
+        return appointment.id
+
+
+def monday_slots(http):
+    response = http.get("/api/extraction-centers/1/slots", headers=login(http), params={"date": MONDAY})
+    return response.json()["slots"]
+
+
+def test_booked_slot_disappears_from_slots(client):
+    http, engine = client
+    add_appointment(engine, datetime(2026, 11, 2, 10, 0, tzinfo=TIMEZONE))
+    slots = monday_slots(http)
+    assert len(slots) == 35 and "2026-11-02T10:00:00-03:00" not in slots
+
+
+def test_cancelled_slot_is_offered_again(client):
+    http, engine = client
+    appointment_id = add_appointment(engine, datetime(2026, 11, 2, 10, 0, tzinfo=TIMEZONE))
+    assert "2026-11-02T10:00:00-03:00" not in monday_slots(http)
+    with Session(engine) as session:
+        session.get(AppointmentModel, appointment_id).status = "cancelled"
+        session.commit()
+    slots = monday_slots(http)
+    assert len(slots) == 36 and "2026-11-02T10:00:00-03:00" in slots
 
 
 def test_authentication_role_and_date_validation(client):
