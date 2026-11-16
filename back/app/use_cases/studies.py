@@ -14,6 +14,7 @@ class StudyService:
         return status in ENABLED_STUDY_STATUSES
 
     def cambiar_estado_estudio(self, study_id: int, nuevo_estado: str) -> None:
+        """No confirma la transacción: el commit lo hace quien llama."""
         if nuevo_estado not in STUDY_STATUSES:
             raise ValueError(f"Estado de estudio inválido: {nuevo_estado}.")
         if not self._studies.set_status(study_id, nuevo_estado):

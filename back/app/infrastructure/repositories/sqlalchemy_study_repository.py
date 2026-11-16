@@ -23,7 +23,8 @@ class SQLAlchemyStudyRepository:
         if study is None:
             return False
         study.status = status
-        self.session.commit()
+        # Sin commit: lo confirma quien llama, junto con sus propios cambios (decisión 008).
+        self.session.flush()
         return True
 
     def claim_analysis(self, study_id: int, analyst_id: int) -> bool:

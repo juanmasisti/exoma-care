@@ -8,6 +8,8 @@ import PathologyCatalog from './features/patologias/PathologyCatalog.jsx'
 import ReservarTurno from './features/logistica/turnos/ReservarTurno.jsx'
 import BioinformaticsDashboard from './features/bioinformatica/BioinformaticsDashboard.jsx'
 import UsersDashboard from './features/admin/UsersDashboard.jsx'
+import DiaExtraccion from './features/logistica/turnos/DiaExtraccion.jsx'
+import MisTurnos from './features/logistica/turnos/MisTurnos.jsx'
 import { getSession, setSession, subscribeSession } from './services/session.js'
 
 function App() {
@@ -17,6 +19,7 @@ function App() {
   const superAdmin = session?.role === 'super_admin'
   const home = superAdmin ? '/super-admin/usuarios' : bioinformatician ? '/bioinformatica/dashboard' : physician ? '/medico/pacientes' : session?.role === 'medical_manager' ? '/catalogo/patologias' : '/portal'
   function patientPage(page) { return !session ? <Navigate to="/" replace /> : physician || superAdmin ? page : <Navigate to={home} replace /> }
+  function patientPortalPage(page) { return !session ? <Navigate to="/" replace /> : session.role === 'patient' ? page : <Navigate to={home} replace /> }
   const catalogAccess = ['medical_manager', 'treating_physician', 'super_admin'].includes(session?.role)
 
   return <Routes>
@@ -35,10 +38,13 @@ function App() {
       ? <BioinformaticsDashboard session={session} /> : <Navigate to={home} replace />} />
     <Route path="/super-admin/usuarios" element={!session ? <Navigate to="/" replace /> : superAdmin
       ? <UsersDashboard session={session} /> : <Navigate to={home} replace />} />
+    <Route path="/paciente/turnos" element={patientPortalPage(<MisTurnos session={session} />)} />
+    <Route path="/paciente/estudios/:studyId/turno" element={patientPortalPage(<DiaExtraccion session={session} />)} />
     <Route path="*" element={!session ? <Navigate to="/" replace /> : <main style={{ padding: 32 }}>
       <h1>Sesión iniciada</h1><p>El portal de tu perfil todavía no está disponible en esta entrega.</p>
       {catalogAccess && <Link to="/catalogo/patologias">Consultar catálogo</Link>}
       {session.role === 'patient' && <Link to="/paciente/turnos/reservar">Reservar turno de extracción</Link>}
+      {session.role === 'patient' && <p><Link to="/paciente/turnos">Mis turnos</Link></p>}
       <p><button type="button" onClick={() => setSession(null)}>Cerrar sesión</button></p>
     </main>} />
   </Routes>

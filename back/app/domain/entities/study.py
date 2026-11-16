@@ -21,8 +21,9 @@ STUDY_STATUSES = (
     "resultado_disponible",
 )
 
-# Estados que permiten sacar turno de extracción.
-ENABLED_STUDY_STATUSES = frozenset({"pagado", "autorizado"})
+# Estados que permiten sacar turno de extracción. requiere_remuestreo: turno nuevo para el
+# mismo estudio, sin volver a pagar (EC-16, decisión 011).
+ENABLED_STUDY_STATUSES = frozenset({"pagado", "autorizado", "requiere_remuestreo"})
 
 BIOINFORMATICS_STATUSES = frozenset(
     {"en_area_bioinformatica", "en_analisis"}
