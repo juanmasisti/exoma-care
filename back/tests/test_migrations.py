@@ -6,11 +6,15 @@ from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.autogenerate import compare_metadata
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import MetaData, create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.database.session import Base
 from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models, logistics_models, study_models  # noqa: F401
+from app.infrastructure.database.reconcile_legacy_bioinformatics_revision import (
+    LOGISTICS_TABLES,
+    reconcile_legacy_bioinformatics_revision,
+)
 
 
 def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
@@ -95,6 +99,31 @@ def test_sample_index_from_the_migration_only_covers_the_current_sample(tmp_path
     engine.dispose()
 
 
+def test_legacy_bioinformatics_database_can_be_reconciled_without_losing_schema(tmp_path):
+    database = tmp_path / "legacy-bioinformatics.db"
+    engine = create_engine(f"sqlite:///{database}")
+    legacy_metadata = MetaData()
+    for table in Base.metadata.sorted_tables:
+        if table.name not in LOGISTICS_TABLES:
+            table.to_metadata(legacy_metadata)
+    legacy_metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        )
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES ('0011')")
+        )
+        assert reconcile_legacy_bioinformatics_revision(connection)
+
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0013"
+        assert LOGISTICS_TABLES.issubset(inspect(connection).get_table_names())
+        assert not reconcile_legacy_bioinformatics_revision(connection)
+    engine.dispose()
+
+
 def test_clinical_migration_preserves_legacy_patient_and_blocks_unsafe_downgrade(tmp_path, monkeypatch):
     database = tmp_path / "legacy.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database}")
@@ -157,9 +186,14 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     from alembic.script import ScriptDirectory
     config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
     scripts=ScriptDirectory.from_config(config)
-    assert scripts.get_heads()==["0008"]
+    assert scripts.get_heads()==["0013"]
     assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
     assert scripts.get_revision("0005").down_revision=="0004"
     assert scripts.get_revision("0006").down_revision=="0005"
-    assert scripts.get_revision("0007").down_revision=="0006"
-    assert scripts.get_revision("0008").down_revision=="0007"
+    assert scripts.get_revision("0007").path.endswith("0007_appointments.py")
+    assert scripts.get_revision("0008").path.endswith("0008_samples.py")
+    assert scripts.get_revision("0009").down_revision=="0008"
+    assert scripts.get_revision("0010").down_revision=="0009"
+    assert scripts.get_revision("0011").down_revision=="0010"
+    assert scripts.get_revision("0012").down_revision=="0011"
+    assert scripts.get_revision("0013").down_revision=="0012"

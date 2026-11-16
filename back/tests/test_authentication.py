@@ -49,6 +49,7 @@ def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["rol"] == "Paciente"
     assert response.json()["role"] == "patient"
+    assert response.json()["user_id"] == 1
     assert response.json()["redirect_to"] == "/paciente/dashboard"
     assert response.json()["token_type"] == "bearer"
     assert response.json()["access_token"]

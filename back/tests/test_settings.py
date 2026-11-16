@@ -13,11 +13,32 @@ def clear_process_config(monkeypatch):
 def test_read_dotenv_and_hide_secret(tmp_path):
     key = "test-dotenv-secret-with-at-least-32-bytes"
     env_file = tmp_path / ".env"
-    env_file.write_text(f"DATABASE_URL=sqlite:///demo.db\nJWT_SECRET_KEY={key}\nUNRELATED=value\n", encoding="utf-8")
+    env_file.write_text(
+        f"DATABASE_URL=sqlite:///demo.db\nJWT_SECRET_KEY={key}\n"
+        "CDSS_BASE_URL=https://cdss.example.test\n"
+        "API_SECRET_KEY_API_CDSS=cdss-test-key\n"
+        "UNRELATED=value\n",
+        encoding="utf-8",
+    )
     settings = Settings(_env_file=env_file)
     assert settings.database_url == "sqlite:///demo.db"
     assert settings.jwt_secret_key.get_secret_value() == key
+    assert settings.cdss_base_url == "https://cdss.example.test"
+    assert settings.cdss_api_key.get_secret_value() == "cdss-test-key"
     assert key not in repr(settings)
+    assert "cdss-test-key" not in repr(settings)
+
+
+def test_notification_api_key_accepts_legacy_environment_name(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "API_SECRET_KEY_API_NOTIFICATIONS=notification-test-key\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.notification_api_key.get_secret_value() == "notification-test-key"
 
 
 def test_process_environment_overrides_dotenv(tmp_path, monkeypatch):

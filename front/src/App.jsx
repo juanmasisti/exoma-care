@@ -7,6 +7,8 @@ import PatientForm from './features/pacientes/PatientForm.jsx'
 import PatientDetail from './features/pacientes/PatientDetail.jsx'
 import PathologyCatalog from './features/patologias/PathologyCatalog.jsx'
 import ReservarTurno from './features/logistica/turnos/ReservarTurno.jsx'
+import BioinformaticsDashboard from './features/bioinformatica/BioinformaticsDashboard.jsx'
+import UsersDashboard from './features/admin/UsersDashboard.jsx'
 import DiaExtraccion from './features/logistica/turnos/DiaExtraccion.jsx'
 import MisTurnos from './features/logistica/turnos/MisTurnos.jsx'
 import { getSession, setSession, subscribeSession } from './services/session.js'
@@ -14,10 +16,12 @@ import { getSession, setSession, subscribeSession } from './services/session.js'
 function App() {
   const session = useSyncExternalStore(subscribeSession, getSession)
   const physician = session?.role === 'treating_physician'
-  const home = physician ? '/medico/pacientes' : session?.role === 'medical_manager' ? '/catalogo/patologias' : '/portal'
-  function patientPage(page) { return !session ? <Navigate to="/" replace /> : physician ? page : <Navigate to={home} replace /> }
+  const bioinformatician = session?.role === 'bioinformatician'
+  const superAdmin = session?.role === 'super_admin'
+  const home = superAdmin ? '/super-admin/usuarios' : bioinformatician ? '/bioinformatica/dashboard' : physician ? '/medico/pacientes' : session?.role === 'medical_manager' ? '/catalogo/patologias' : '/portal'
+  function patientPage(page) { return !session ? <Navigate to="/" replace /> : physician || superAdmin ? page : <Navigate to={home} replace /> }
   function patientPortalPage(page) { return !session ? <Navigate to="/" replace /> : session.role === 'patient' ? page : <Navigate to={home} replace /> }
-  const catalogAccess = ['medical_manager', 'treating_physician'].includes(session?.role)
+  const catalogAccess = ['medical_manager', 'treating_physician', 'super_admin'].includes(session?.role)
 
   return <Routes>
     <Route path="/" element={session ? <Navigate to={home} replace /> : <Login />} />
@@ -29,9 +33,14 @@ function App() {
     <Route path="/login" element={<Navigate to="/" replace />} />
     <Route path="/catalogo/patologias" element={!session ? <Navigate to="/" replace /> : catalogAccess
       ? <PathologyCatalog session={session} /> : <Navigate to="/portal" replace />} />
+    <Route path="/paciente/turnos/reservar" element={!session ? <Navigate to="/" replace /> : session.role === 'patient'
+      ? <ReservarTurno session={session} /> : <Navigate to={home} replace />} />
+    <Route path="/bioinformatica/dashboard" element={!session ? <Navigate to="/" replace /> : bioinformatician
+      ? <BioinformaticsDashboard session={session} /> : <Navigate to={home} replace />} />
+    <Route path="/super-admin/usuarios" element={!session ? <Navigate to="/" replace /> : superAdmin
+      ? <UsersDashboard session={session} /> : <Navigate to={home} replace />} />
     <Route path="/paciente/consultas" element={patientPortalPage(<PatientChat key={session?.access_token} session={session} />)} />
     <Route path="/paciente/turnos" element={patientPortalPage(<MisTurnos session={session} />)} />
-    <Route path="/paciente/turnos/reservar" element={patientPortalPage(<ReservarTurno session={session} />)} />
     <Route path="/paciente/estudios/:studyId/turno" element={patientPortalPage(<DiaExtraccion session={session} />)} />
     <Route path="*" element={!session ? <Navigate to="/" replace /> : <main style={{ padding: 32 }}>
       <h1>Sesión iniciada</h1><p>El portal de tu perfil todavía no está disponible en esta entrega.</p>

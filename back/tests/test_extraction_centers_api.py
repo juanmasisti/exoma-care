@@ -12,7 +12,7 @@ from app.infrastructure.database.logistics_models import AppointmentModel, Extra
 from app.infrastructure.database.models import Paciente, Usuario
 from app.infrastructure.database.study_models import StudyModel
 from app.infrastructure.database.security import hash_password
-from app.infrastructure.database.seed_demo_extraction_centers import seed_demo_extraction_centers
+from seeders.logistics import seed_demo_extraction_centers
 from app.infrastructure.database.session import Base
 from app.main import app
 

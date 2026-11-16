@@ -39,3 +39,4 @@
 .clinical-nav-active { background: #eef2ff; color: #4338ca; }
 .clinical-nav-link:hover { background: #f8fafc; color: #0f172a; }
 .clinical-breadcrumb a { text-decoration: none; color: #64748b; }
+.clinical-navigation .clinical-nav-count { display: grid; min-width: 22px; height: 22px; place-items: center; margin: 0; padding: 0 6px; border-radius: 999px; color: #4338ca; background: #e0e7ff; font-size: 10px; font-weight: 750; }

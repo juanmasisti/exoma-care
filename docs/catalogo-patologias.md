@@ -26,12 +26,14 @@ No usar stamp para ocultar diferencias de esquema ni borrar bases existentes.
 Para una demostración optativa con conceptos ficticios:
 
 ```sh
-python -m app.infrastructure.database.seed_catalog_demo
+python -m seeders concepts
 ```
 
 Los códigos DEMO no son SNOMED. No se incluyen relaciones reales entre las
 cinco patologías del relevamiento y síntomas: necesitan el catálogo confirmado.
 El cargador no crea usuarios ni patologías y puede repetirse sin duplicados.
+Para cargar las cinco patologías iniciales de demostración, ejecutar
+`python -m seeders catalog` desde `back`.
 
 ## API
 
