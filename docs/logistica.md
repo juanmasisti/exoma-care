@@ -297,3 +297,55 @@ camino feliz. Con el back levantado y `EXTRACTION_WEBHOOK_SECRET` en `back/.env`
 Pruebas: `back/tests/test_extraction_api.py`, `back/tests/test_logistics_domain.py` y
 `back/tests/test_migrations.py` (índice parcial de la `0008`).
 Detalles y pendientes en la [decisión 011](decisiones/011-extraccion-y-remuestreo.md).
+
+## Seguimiento del paciente (T03b)
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| GET /api/studies/tracking/mine | `patient` | Estudios propios con al menos una muestra: `study_id`, `code`, `status`, `stage`, `requires_new_extraction` |
+| GET /api/studies/{id}/tracking | `patient` | Igual que en T03, ahora también con `stage` |
+
+`/tracking/mine` existe porque, cuando llega el aviso de extracción, el turno pasa a `attended`
+y "Mis turnos" (`/appointments/mine`, solo turnos reservados) deja de mostrarlo: sin esta lista,
+el paciente no llegaría al seguimiento justo cuando la muestra está lista o hay que repetirla.
+401 sin sesión y 403 con otro rol.
+
+`stage` lo calcula el back (`tracking_stage` en `use_cases/extraction.py`). Los estados de
+bioinformática salen de sus constantes (`BIOINFORMATICS_STATUSES` y `RESULT_AVAILABLE_STATUS`):
+
+| `stage` | Texto para el paciente | Cuándo |
+| --- | --- | --- |
+| `extraction` | Extracción | Sin muestra vigente (todavía no se tomó o se sacó turno nuevo) |
+| `ready_for_pickup` | Muestra lista para retirar | Muestra `ready_for_pickup` |
+| `to_lab` | En camino al laboratorio | Muestra `with_transporter` |
+| `central_lab` | En el laboratorio central | Muestra `received` o `in_sample_set` |
+| `to_korea` | En viaje al laboratorio de análisis | Muestra `in_transit_to_korea` |
+| `analysis` | En análisis | Estudio en un estado de bioinformática |
+| `result_available` | Resultado disponible | Estudio con el resultado disponible |
+| `resample` | Hay que repetir la extracción | Estudio `requiere_remuestreo` |
+
+### Pantalla
+
+"Seguimiento" en `/paciente/estudios/ID/seguimiento` (solo `patient`; miga de pan "Mis turnos ›
+Seguimiento"). Muestra la etapa actual con una explicación corta y la lista de etapas (hechas,
+actual y por venir). En remuestreo, en lugar de la lista, explica que hay que repetir la extracción, que es el mismo
+estudio y no se paga de nuevo, el motivo (el que cargó bioinformática o, si no hay, el volumen
+mínimo de 2 ml) y el botón "Sacar turno nuevo", que lleva a la reserva con ese estudio elegido.
+Las muestras descartadas quedan en "Muestras anteriores", con la fecha de la extracción y el
+volumen. Estados de carga y de error con "Reintentar".
+
+Se llega navegando dentro de la app (la sesión está en memoria y se pierde al escribir la URL):
+- "Mis turnos": "Ver seguimiento" en cada turno y la sección "Seguimiento de tus estudios"
+  (estudios ya extraídos). Esa sección carga aparte: si falla, la lista de turnos se sigue viendo
+  y el error tiene su propio "Reintentar". Sin turnos pero con estudios en seguimiento, no
+  muestra la invitación a reservar.
+- "Día de extracción": "Ver seguimiento del estudio" (o "Ver seguimiento" cuando el estudio ya
+  no tiene turno vigente).
+
+Para probarlo en el navegador: reservar un turno, mandar el aviso con el simulador (sección
+"Simulación del bot") y entrar desde "Mis turnos". Con `1.9` ml aparece el remuestreo; con
+`2.5`, "Muestra lista para retirar".
+
+Pruebas: `back/tests/test_extraction_api.py`, `front/tests/turnos-seguimiento.test.mjs` y
+`front/tests/turnos-mis-turnos.test.mjs`.
+Detalles en la [decisión 013](decisiones/013-seguimiento-paciente.md).
