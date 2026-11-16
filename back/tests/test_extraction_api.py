@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.extraction import get_resample_notifier
 from app.domain.entities.logistics import TIMEZONE
+from app.domain.entities.study import BIOINFORMATICS_STATUSES
 from app.infrastructure.database.logistics_models import (
     AppointmentModel, ExtractionNoticeModel, SampleEventModel, SampleModel,
 )
@@ -17,10 +18,14 @@ from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQ
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
 from app.main import app
-from app.use_cases.extraction import Conflict, ExtractionService, NotFound
+from app.use_cases.bioinformatics import RESULT_AVAILABLE_STATUS
+from app.use_cases.extraction import (
+    READY_FOR_PICKUP, REQUIRES_RESAMPLE, Conflict, ExtractionService, NotFound, tracking_stage,
+)
 from app.use_cases.studies import StudyService
 from appointments_setup import (
-    ADMIN, AUTHORIZED, DOCTOR, OTHER_PATIENT, PAID, SOFIA, book, client, login, study_status,  # noqa: F401
+    ADMIN, AUTHORIZED, DOCTOR, OTHER_PATIENT, OTHERS_STUDY, PAID, SOFIA, book, client, login,  # noqa: F401
+    study_status,
 )
 
 SECRET = "extraction-webhook-test-secret"
@@ -252,8 +257,9 @@ def test_tracking_shows_the_samples_and_the_resample(extraction):
     response = http.get(f"/api/studies/{PAID}/tracking", headers=login(http))
     assert response.status_code == 200
     body = response.json()
-    assert {key: body[key] for key in ("study_id", "code", "status", "requires_new_extraction")} == {
-        "study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo", "requires_new_extraction": True}
+    assert {key: body[key] for key in ("study_id", "code", "status", "stage", "requires_new_extraction")} == {
+        "study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo", "stage": "resample",
+        "requires_new_extraction": True}
     [sample] = body["samples"]
     assert (sample["volume_ml"], sample["status"], sample["is_current"]) == ("1.90", "discarded", False)
     assert sample["events"] == [{"from_status": None, "to_status": "discarded", "reason": None,
@@ -269,3 +275,46 @@ def test_tracking_permissions(extraction):
     for study_id in (PAID, 999):
         assert http.get(f"/api/studies/{study_id}/tracking", headers=login(http, OTHER_PATIENT)).status_code == 404
     assert http.get(f"/api/studies/{PAID}/tracking", headers=login(http, SOFIA)).status_code == 200
+
+
+@pytest.mark.parametrize("sample_status, stage", [
+    (None, "extraction"), ("ready_for_pickup", "ready_for_pickup"), ("with_transporter", "to_lab"),
+    ("received", "central_lab"), ("in_sample_set", "central_lab"), ("in_transit_to_korea", "to_korea"),
+])
+def test_stage_follows_the_current_sample(sample_status, stage):
+    assert tracking_stage(READY_FOR_PICKUP, sample_status) == stage
+
+
+def test_stage_after_korea_follows_the_study_status():
+    # Estados de bioinformática tomados de sus constantes, no escritos a mano.
+    for status in BIOINFORMATICS_STATUSES:
+        assert tracking_stage(status, "in_transit_to_korea") == "analysis"
+    assert tracking_stage(RESULT_AVAILABLE_STATUS, "in_transit_to_korea") == "result_available"
+    assert tracking_stage(REQUIRES_RESAMPLE, None) == "resample"
+
+
+def test_my_trackings_list_own_studies_with_a_sample(extraction):
+    http, _, _ = extraction
+    assert http.get("/api/studies/tracking/mine", headers=login(http)).json() == []
+    book(http)
+    notice(http, "1.9")
+    assert book(http, OTHERS_STUDY, starts_at="2026-11-02T11:00:00-03:00", user=OTHER_PATIENT).status_code == 201
+    assert notice(http, "2.5", external_id="bot-2", code="EST-000005").status_code == 201
+    response = http.get("/api/studies/tracking/mine", headers=login(http))
+    assert response.status_code == 200
+    # El estudio autorizado sin muestra y el de otro paciente no aparecen.
+    assert response.json() == [{"study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo",
+                                "stage": "resample", "requires_new_extraction": True}]
+    book(http, starts_at="2026-11-04T10:00:00-03:00")
+    [rebooked] = http.get("/api/studies/tracking/mine", headers=login(http)).json()
+    assert (rebooked["stage"], rebooked["requires_new_extraction"]) == ("extraction", False)
+    # Una descartada y una vigente: una sola fila, con la etapa de la vigente.
+    assert notice(http, "2.0", external_id="bot-3").status_code == 201
+    [resampled] = http.get("/api/studies/tracking/mine", headers=login(http)).json()
+    assert (resampled["study_id"], resampled["stage"]) == (PAID, "ready_for_pickup")
+
+
+def test_my_trackings_permissions(extraction):
+    http, _, _ = extraction
+    assert http.get("/api/studies/tracking/mine").status_code == 401
+    assert http.get("/api/studies/tracking/mine", headers=login(http, DOCTOR)).status_code == 403

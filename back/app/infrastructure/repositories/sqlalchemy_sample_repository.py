@@ -5,13 +5,14 @@ from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.domain.entities.logistics import TIMEZONE, AppointmentStatus, SampleStatus
 from app.domain.interfaces.sample_repository import CurrentSampleExists, NoticeAlreadyReceived
 from app.infrastructure.database.logistics_models import (
     AppointmentModel, ExtractionNoticeModel, SampleEventModel, SampleModel,
 )
+from app.infrastructure.database.models import Paciente
 from app.infrastructure.database.study_models import StudyModel
 
 
@@ -99,6 +100,20 @@ class SQLAlchemySampleRepository:
                              "reason": event.reason, "at": event.at.astimezone(TIMEZONE)}
                             for event in events if event.sample_id == sample.id]}
                 for sample in samples]
+
+    def studies_with_samples_for_user(self, user_id: int) -> list[dict]:
+        # PROVISORIO (decisión 013): lectura directa de studies y patients, como en turnos, hasta que
+        # estudios ofrezca la lista de estudios del paciente. Solo lectura.
+        current = aliased(SampleModel)
+        has_sample = select(SampleModel.id).where(SampleModel.study_id == StudyModel.id).exists()
+        rows = self.session.execute(
+            select(StudyModel.id, StudyModel.status, current.status)
+            .join(Paciente, Paciente.id == StudyModel.patient_id)
+            .outerjoin(current, (current.study_id == StudyModel.id) & current.is_current.is_(True))
+            .where(Paciente.usuario_id == user_id, has_sample).order_by(StudyModel.id)
+        )
+        return [{"id": id_, "status": status, "current_sample_status": sample_status}
+                for id_, status, sample_status in rows]
 
     def commit(self) -> None:
         self.session.commit()

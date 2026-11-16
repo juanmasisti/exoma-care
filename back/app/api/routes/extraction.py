@@ -83,11 +83,15 @@ class SampleResponse(BaseModel):
     events: list[SampleEventResponse]
 
 
-class TrackingResponse(BaseModel):
+class TrackingSummaryResponse(BaseModel):
     study_id: int
     code: str
     status: str
+    stage: str
     requires_new_extraction: bool
+
+
+class TrackingResponse(TrackingSummaryResponse):
     samples: list[SampleResponse]
 
 
@@ -101,6 +105,11 @@ def receive_extraction_notice(body: ExtractionNoticeRequest, response: Response,
     if not created:
         response.status_code = 200
     return result
+
+
+@router.get("/studies/tracking/mine", response_model=list[TrackingSummaryResponse])
+def my_study_trackings(user: AuthenticatedUser = Depends(patient), service: ExtractionService = Depends(get_service)):
+    return service.mis_seguimientos(user.id)
 
 
 @router.get("/studies/{study_id}/tracking", response_model=TrackingResponse)
