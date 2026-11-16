@@ -1,4 +1,4 @@
-import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, History, LayoutDashboard, LogOut, ShieldCheck, Stethoscope, UserCog, Users } from 'lucide-react'
+import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, History, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, Stethoscope, UserCog, Users } from 'lucide-react'
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom'
 import { setSession } from '../../services/session.js'
 import './ClinicalLayout.css'
@@ -13,6 +13,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   const [searchParams] = useSearchParams()
   const bioSection = searchParams.get('section') || 'inicio'
   const patientsArea = location.pathname.startsWith('/medico/pacientes')
+  const chatArea = location.pathname.startsWith('/paciente/consultas')
   const myAppointmentsArea = location.pathname === '/paciente/turnos' || location.pathname.startsWith('/paciente/estudios/')
   const bioSectionLabels = {
     inicio: 'Inicio / Dashboard',
@@ -20,12 +21,12 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
     analisis: 'En análisis',
     historial: 'Historial',
   }
-  const viewLabel = superAdmin ? 'Administración de usuarios' : patient ? (myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
+  const viewLabel = superAdmin ? 'Administración de usuarios' : patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
   const home = superAdmin ? '/super-admin/usuarios' : patient ? '/paciente/turnos/reservar' : bioinformatician ? '/bioinformatica/dashboard' : manager ? '/catalogo/patologias' : '/medico/pacientes'
   const viewPath = superAdmin
     ? home
     : patient
-      ? (myAppointmentsArea ? '/paciente/turnos' : home)
+      ? (chatArea ? '/paciente/consultas' : myAppointmentsArea ? '/paciente/turnos' : home)
       : bioinformatician
         ? `${home}?section=${bioSection}`
         : patientsArea
@@ -44,6 +45,9 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
         <p>{superAdmin ? 'ADMINISTRACIÓN' : patient ? 'PORTAL DEL PACIENTE' : bioinformatician ? 'ANÁLISIS GENÓMICO' : manager ? 'GESTIÓN MÉDICA' : 'CONSULTA CLÍNICA'}</p>
         {superAdmin && <NavLink to={home} className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <UserCog size={19} aria-hidden="true" /><span><strong>Usuarios y roles</strong><small>Altas de personal</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {patient && <NavLink to="/paciente/consultas" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <MessageCircle size={19} aria-hidden="true" /><span><strong>Consultas</strong><small>Estudios genéticos y patologías</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
         {patient && <NavLink to="/paciente/turnos" end className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <CalendarCheck size={19} aria-hidden="true" /><span><strong>Mis turnos</strong><small>Turnos reservados</small></span><ChevronRight size={15} aria-hidden="true" />
@@ -87,7 +91,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
     </aside>
     <div className="clinical-workspace">
       <header className="clinical-topbar">
-        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={viewPath}>{viewLabel}</Link>{pageLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
+        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={viewPath}>{viewLabel}</Link>{pageLabel && pageLabel !== viewLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
         <button type="button" className="clinical-logout" onClick={() => setSession(null)}><LogOut size={15} aria-hidden="true" /><span>Cerrar sesión</span></button>
       </header>
       <main id="clinical-content" className="clinical-main" tabIndex={-1}>{children}</main>
