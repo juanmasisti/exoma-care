@@ -23,9 +23,14 @@ LOGISTICS_TABLES = {"provinces", "extraction_centers", "holidays"}
 FAMILY_TABLES = {"patient_family_records", "family_members", "family_member_symptoms", "family_member_diagnoses", "patient_family_revisions"}
 # Migraciones posteriores a 0005: esta herramienta solo llega a 0005; lo que sigue es alembic upgrade.
 REVISIONS_AFTER_0005 = {
-    "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"
+    "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014"
 }
-TABLES_AFTER_0005 = {"studies", "notification_logs", "appointments", "extraction_notices", "samples", "sample_events"}
+TABLES_AFTER_0005 = {
+    "studies", "notification_logs", "appointments", "extraction_notices", "samples", "sample_events",
+    # Migración 0014: solicitudes de estudio, presupuestos, cupones y pagos.
+    "study_pathologies", "study_genes", "study_budgets", "coverage_requests", "coverage_demands",
+    "financial_operations", "coupons",
+}
 
 
 def _require_schema(connection, metadata):
