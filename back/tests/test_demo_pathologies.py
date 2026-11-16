@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.database.session import Base
 from app.infrastructure.database.catalog_models import PathologyModel, SymptomModel
-from app.infrastructure.database.seed_demo_pathologies import seed_demo_pathologies
+from seeders.catalog import seed_demo_pathologies
 
 
 @pytest.fixture

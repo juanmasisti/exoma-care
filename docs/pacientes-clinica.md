@@ -24,7 +24,7 @@ Con entorno y `back/.env` preparados, desde `back`:
 ./.venv/Scripts/python.exe -m alembic upgrade head
 ./.venv/Scripts/python.exe -m alembic current
 # Debe informar 0003. Carga opcional de las cinco patologías DEMO:
-./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_pathologies
+./.venv/Scripts/python.exe -m seeders catalog
 bash dev.sh
 ```
 

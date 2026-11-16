@@ -11,6 +11,8 @@ detalles.
   persistencia.
 - [`repositories/`](./repositories/README.md): adaptadores de repositorio
   concretos.
+- `external_services/`: clientes para APIs externas, incluido el cliente TTPS
+  de notificaciones.
 
-Los módulos directamente en esta carpeta implementan servicios técnicos
-transversales, como la emisión de tokens.
+`notification_logs` conserva la referencia, la clave de idempotencia y el
+estado inicial que devuelve el proveedor para auditar cada aviso.

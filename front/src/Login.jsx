@@ -20,6 +20,7 @@ const roleRoutes = {
   administrativo: '/administrativo/dashboard',
   bioinformatico: '/bioinformatica/dashboard',
   gerente: '/gerente/dashboard',
+  'super admin': '/super-admin/usuarios',
 }
 
 function DnaBackground() {
@@ -70,9 +71,11 @@ function Login() {
 
     try {
       const user = await login(identifier, password)
-      const destination = user.role === 'treating_physician' ? '/medico/pacientes'
-        : user.role === 'medical_manager' ? '/catalogo/patologias'
-          : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
+      const destination = user.role === 'bioinformatician' ? '/bioinformatica/dashboard'
+        : user.role === 'super_admin' ? '/super-admin/usuarios'
+        : user.role === 'treating_physician' ? '/medico/pacientes'
+          : user.role === 'medical_manager' ? '/catalogo/patologias'
+            : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
 
       navigate(destination)
     } catch (loginError) {

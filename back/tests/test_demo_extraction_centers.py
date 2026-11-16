@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.infrastructure.database.session import Base
 from app.infrastructure.database.logistics_models import ExtractionCenterModel, HolidayModel, ProvinceModel
-from app.infrastructure.database.seed_demo_extraction_centers import seed_demo_extraction_centers
+from seeders.logistics import seed_demo_extraction_centers
 
 
 @pytest.fixture

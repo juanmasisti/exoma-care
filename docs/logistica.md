@@ -44,7 +44,7 @@ Desde `back`:
 ```bash
 ./.venv/Scripts/python.exe -m alembic upgrade head
 # Debe informar 0004. Carga opcional de provincias, 100 centros DEMO y feriados fijos:
-./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers
+./.venv/Scripts/python.exe -m seeders logistics
 bash dev.sh
 ```
 

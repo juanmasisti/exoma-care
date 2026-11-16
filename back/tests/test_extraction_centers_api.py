@@ -11,7 +11,7 @@ from app.domain.entities.logistics import TIMEZONE
 from app.infrastructure.database.logistics_models import ExtractionCenterModel, ProvinceModel
 from app.infrastructure.database.models import Usuario
 from app.infrastructure.database.security import hash_password
-from app.infrastructure.database.seed_demo_extraction_centers import seed_demo_extraction_centers
+from seeders.logistics import seed_demo_extraction_centers
 from app.infrastructure.database.session import Base
 from app.main import app
 

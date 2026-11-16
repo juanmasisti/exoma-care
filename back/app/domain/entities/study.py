@@ -1,7 +1,9 @@
-"""PROVISORIO: estados mínimos del estudio para destrabar turnos; lo amplía el área de estudios (Tomás).
+"""Study states and bioinformatics result data."""
 
-Nombres tomados del glosario. Sin transiciones: las define Tomás.
-"""
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Any
+
 
 STUDY_STATUSES = (
     "creado",
@@ -21,3 +23,20 @@ STUDY_STATUSES = (
 
 # Estados que permiten sacar turno de extracción.
 ENABLED_STUDY_STATUSES = frozenset({"pagado", "autorizado"})
+
+BIOINFORMATICS_STATUSES = frozenset(
+    {"en_area_bioinformatica", "en_analisis"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Study:
+    id: int
+    patient_id: int
+    status: str
+    analyst_id: int | None
+    variantes_detectadas: list[dict[str, Any]] | None
+    resultado_diagnostico: str | None
+    hallazgos_secundarios: list[dict[str, Any]] | None
+    fecha_reevaluacion: date | None
+    created_at: datetime

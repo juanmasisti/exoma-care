@@ -7,6 +7,7 @@ class UserRole(str, Enum):
     BIOINFORMATICIAN = "bioinformatician"
     PATIENT = "patient"
     MEDICAL_MANAGER = "medical_manager"
+    SUPER_ADMIN = "super_admin"
 
     @property
     def display_name(self) -> str:
@@ -16,4 +17,5 @@ class UserRole(str, Enum):
             UserRole.BIOINFORMATICIAN: "Bioinformático",
             UserRole.PATIENT: "Paciente",
             UserRole.MEDICAL_MANAGER: "Gerente",
+            UserRole.SUPER_ADMIN: "Super Admin",
         }[self]

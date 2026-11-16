@@ -7,3 +7,7 @@ explícitos. No deben conocer los detalles HTTP; los routers adaptan sus
 resultados a respuestas.
 
 Actualmente `authentication.py` implementa la autenticación de usuarios.
+`notifications.py` contiene el caso de uso reutilizable para enviar un aviso y
+guardar su referencia externa para auditoría.
+Al finalizar un análisis bioinformático se avisa al paciente y al médico
+asociado con un mensaje genérico, sin incluir datos genéticos en el correo.

@@ -45,11 +45,19 @@ INITIAL_USERS = (
         "email": "carla.mendez@exoma.test",
     },
     {
+        "username": "superadmin.exoma",
+        "role": UserRole.SUPER_ADMIN,
+        "first_name": "Super",
+        "last_name": "Admin",
+        "phone": "+54 11 4000 0005",
+        "email": "superadmin@exoma.test",
+    },
+    {
         "username": "paciente-45000001",
         "role": UserRole.PATIENT,
         "first_name": "Sofía",
         "last_name": "Ramírez",
-        "phone": "+54 11 4000 0005",
+        "phone": "+54 11 4000 0006",
         "email": "sofia.ramirez@exoma.test",
         "national_id": "45000001",
         "date_of_birth": date(1990, 5, 14),
@@ -57,7 +65,7 @@ INITIAL_USERS = (
 )
 
 
-def seed_users() -> None:
+def seed() -> None:
     Base.metadata.create_all(bind=engine)
     created = 0
     skipped = 0
@@ -103,4 +111,4 @@ def seed_users() -> None:
 
 
 if __name__ == "__main__":
-    seed_users()
+    seed()

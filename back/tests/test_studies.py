@@ -3,11 +3,11 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.infrastructure.database.models import Paciente
-from app.infrastructure.database.seed_demo_studies import seed_demo_studies
 from app.infrastructure.database.session import Base
 from app.infrastructure.database.study_models import StudyModel
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
 from app.use_cases.studies import StudyService
+from seeders.studies import seed_demo_studies
 
 
 @pytest.fixture
