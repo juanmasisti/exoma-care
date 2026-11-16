@@ -96,8 +96,9 @@ Desde `back`:
 
 ```bash
 ./.venv/Scripts/python.exe -m alembic upgrade head
-# Debe informar 0007. Carga opcional de provincias, 100 centros DEMO y feriados fijos:
-./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers
+# Debe quedar en la cabeza que informa `alembic heads`. Carga opcional de provincias,
+# 100 centros DEMO y feriados fijos (también migra antes de cargar):
+./.venv/Scripts/python.exe -m seeders logistics
 bash dev.sh
 ```
 
@@ -289,7 +290,7 @@ hace el mismo POST que haría el bot real, con un `external_id` nuevo y la hora 
 camino feliz. Con el back levantado y `EXTRACTION_WEBHOOK_SECRET` en `back/.env`, desde `back`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head   # 0008
+.\.venv\Scripts\python.exe -m alembic upgrade head   # incluye la 0008 (muestras)
 .\.venv\Scripts\python.exe -m scripts.simular_aviso_extraccion EST-000001 2.5
 ```
 
