@@ -22,7 +22,15 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   }
   const viewLabel = superAdmin ? 'Administración de usuarios' : patient ? (myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
   const home = superAdmin ? '/super-admin/usuarios' : patient ? '/paciente/turnos/reservar' : bioinformatician ? '/bioinformatica/dashboard' : manager ? '/catalogo/patologias' : '/medico/pacientes'
-  const viewPath = patient ? (myAppointmentsArea ? '/paciente/turnos' : home) : patientsArea ? '/medico/pacientes' : '/catalogo/patologias'
+  const viewPath = superAdmin
+    ? home
+    : patient
+      ? (myAppointmentsArea ? '/paciente/turnos' : home)
+      : bioinformatician
+        ? `${home}?section=${bioSection}`
+        : patientsArea
+          ? '/medico/pacientes'
+          : '/catalogo/patologias'
 
   return <div className="clinical-shell">
     <a className="clinical-skip-link" href="#clinical-content">Ir al contenido</a>
@@ -79,7 +87,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
     </aside>
     <div className="clinical-workspace">
       <header className="clinical-topbar">
-        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={superAdmin || patient ? home : patientsArea ? "/medico/pacientes" : "/catalogo/patologias"}>{viewLabel}</Link>{pageLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
+        <nav aria-label="Ubicación actual" className="clinical-breadcrumb"><span>Exoma Care</span><ChevronRight size={14} aria-hidden="true" /><Link to={viewPath}>{viewLabel}</Link>{pageLabel && <><ChevronRight size={14} aria-hidden="true" /><strong>{pageLabel}</strong></>}</nav>
         <button type="button" className="clinical-logout" onClick={() => setSession(null)}><LogOut size={15} aria-hidden="true" /><span>Cerrar sesión</span></button>
       </header>
       <main id="clinical-content" className="clinical-main" tabIndex={-1}>{children}</main>

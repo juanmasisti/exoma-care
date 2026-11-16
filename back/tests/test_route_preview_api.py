@@ -14,9 +14,9 @@ from app.infrastructure.adapters.route_optimizer_client import RouteOptimizerCli
 from app.infrastructure.database.logistics_models import ExtractionCenterModel
 from app.infrastructure.database.models import Usuario
 from app.infrastructure.database.security import hash_password
-from app.infrastructure.database.seed_demo_extraction_centers import seed_demo_extraction_centers
 from app.infrastructure.database.session import Base
 from app.main import app
+from seeders.logistics import seed_demo_extraction_centers
 
 TEST_HASH = hash_password("route-preview-test-password")
 

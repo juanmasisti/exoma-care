@@ -40,3 +40,14 @@ que cree tablas tiene que sumarse a esas dos constantes.**
 - El resto de los campos del estudio (pagos, presupuesto, autorización, médico, etc.).
 - Mantener las dos funciones con la misma firma (o avisar si cambia) para no romper logística.
 - Mantener que `cambiar_estado_estudio` no haga commit: turnos depende de eso para la atomicidad.
+
+## Integración posterior de bioinformática
+
+Develop incorporó las migraciones `0007` (turnos) y `0008` (muestras). Para
+evitar identificadores duplicados, los cambios de bioinformática continúan en
+`0009` (asignación y resultado inicial) y `0010` (campos estructurados); siguen
+`0011` (rol superadministrador), `0012` (logs de notificación) y `0013`
+(código de patología). Las bases locales que ya aplicaron la numeración
+anterior deben usar la herramienta explícita
+`app.infrastructure.database.reconcile_legacy_bioinformatics_revision`; no
+editar manualmente `alembic_version`.

@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0010"
-down_revision = "0009"
+revision = "0012"
+down_revision = "0011"
 branch_labels = depends_on = None
 
 
@@ -20,6 +20,7 @@ def upgrade():
         sa.UniqueConstraint("aviso_id"),
         sa.UniqueConstraint("idempotency_key"),
     )
+
 
 def downgrade():
     op.drop_table("notification_logs")

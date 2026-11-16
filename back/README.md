@@ -111,8 +111,9 @@ Si ya usaste la antigua `0004` de la rama familiar, seguí la [reconciliación e
 
 ## Análisis bioinformático
 
-Las migraciones `0007` y `0008` guardan la asignación del bioinformático y los
-resultados estructurados. Apigen se configura con `APIGEN_BASE_URL` y
+Las migraciones `0009` y `0010` guardan la asignación del bioinformático y los
+resultados estructurados; `0007` y `0008` corresponden a turnos y muestras de
+logística. Apigen se configura con `APIGEN_BASE_URL` y
 `APIGEN_API_KEY` en `back/.env`; también se acepta el nombre local
 `API_GEN_URL` y `API_SECRET_KEY_API_GEN` para compatibilidad. La credencial de
 Apigen se envía en `apikey`, nunca como Bearer ni como `JWT_SECRET_KEY` de
@@ -140,3 +141,17 @@ Configurar `CDSS_BASE_URL` (por defecto `https://genexoma.onrender.com`) y
 `GET /api/bioinformatica/patologias` solo admite los roles `bioinformatician`
 y `super_admin`; las demás rutas bioinformáticas siguen restringidas al
 bioinformático.
+
+La integración posterior a develop continúa con las migraciones `0011`
+(superadministrador), `0012` (trazabilidad de avisos) y `0013` (código de
+patología del estudio). Si la base local ya había aplicado la cadena anterior
+que terminaba en `0011`, inspeccionarla primero con
+`python -m app.infrastructure.database.reconcile_legacy_bioinformatics_revision`.
+La herramienta no modifica la base por defecto. Aplicarla requiere un respaldo
+nuevo fuera del repositorio:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.infrastructure.database.reconcile_legacy_bioinformatics_revision --apply --backup C:\ruta\fuera-del-repo\exoma-care-antes-del-merge.db
+```
+
+No usar `alembic stamp` ni ejecutar la reconciliación sin revisar el respaldo.

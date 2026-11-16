@@ -1,8 +1,8 @@
 """Add the Super Admin role to existing databases."""
 from alembic import op
 
-revision = "0009"
-down_revision = "0008"
+revision = "0011"
+down_revision = "0010"
 branch_labels = depends_on = None
 
 
