@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { CalendarClock } from 'lucide-react'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
 import { cancelAppointment, downloadAppointmentDocument, getStudyAppointment } from './api.js'
@@ -67,11 +68,12 @@ export default function DiaExtraccion({ session }) {
   }
 
   const center = appointment?.center
-  return <ClinicalLayout session={session} pageLabel="Día de extracción"><section className="turnos-page">
-    <header className="turnos-header"><h1>Día de extracción</h1><p>Tu turno para la extracción de sangre del estudio.</p></header>
+  return <ClinicalLayout session={session} pageLabel="Día de extracción"><section className="turnos-page turnos-patient">
+    <header className="turnos-heading"><span>TURNO DE EXTRACCIÓN</span><h1><CalendarClock aria-hidden="true" />Día de extracción</h1>
+      <p>Tu turno para la extracción de sangre del estudio.</p></header>
 
     {loadError ? <div role="alert" className="turnos-error"><p>{loadError}</p><button type="button" onClick={() => { setLoadError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
-      : missing ? <div className="turnos-card turnos-appointment"><p className="turnos-empty">Este estudio no tiene un turno vigente.</p><div className="turnos-links"><Link to={bookingPath}>Reservar turno</Link><Link to={trackingPath}>Ver seguimiento</Link></div></div>
+      : missing ? <div className="turnos-card turnos-appointment"><p className="turnos-empty">Este estudio no tiene un turno vigente.</p><div className="turnos-links"><Link className="turnos-action" to={bookingPath}>Reservar turno</Link><Link className="turnos-action-secondary" to={trackingPath}>Ver seguimiento</Link></div></div>
         : !appointment ? <p role="status" className="turnos-loading">Cargando turno...</p>
           : <article className="turnos-card turnos-appointment" aria-labelledby="turnos-appointment-title">
             <h2 id="turnos-appointment-title">Tu turno</h2>
@@ -81,7 +83,7 @@ export default function DiaExtraccion({ session }) {
               <dt>Centro</dt><dd>{center.name}<small>{center.address}, {center.city}</small>{center.phone && <small>Teléfono: {center.phone}</small>}</dd>
             </dl>
             <p className="turnos-note">No requiere ayuno ni preparación especial.</p>
-            <p><Link to={trackingPath}>Ver seguimiento del estudio</Link></p>
+            <div className="turnos-links"><Link className="turnos-action" to={trackingPath}>Ver seguimiento del estudio</Link></div>
             <div className="turnos-documents" role="group" aria-label="Documentos del turno">
               <button type="button" disabled={downloading !== null} onClick={() => download('order', 'orden')}>{downloading === 'order' ? 'Descargando...' : 'Descargar orden'}</button>
               <button type="button" disabled={downloading !== null} onClick={() => download('consent', 'consentimiento')}>{downloading === 'consent' ? 'Descargando...' : 'Descargar consentimiento'}</button>

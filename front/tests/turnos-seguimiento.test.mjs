@@ -119,7 +119,7 @@ test('si falla solo el seguimiento, Mis turnos sigue mostrando los turnos y se p
   assert.match(container.querySelector('.turnos-list').textContent,/Estudio EST-000007/)
   assert.equal(container.querySelector('[role="alert"]').textContent,'No se pudo cargar el seguimiento.Reintentar')
   fake.myTrackingsDown=false
-  fake.myTrackings=[{study_id:7,code:'EST-000007',status:'listo_para_retirar',stage:'ready_for_pickup',requires_new_extraction:false}]
+  fake.myTrackings=[{study_id:8,code:'EST-000008',status:'listo_para_retirar',stage:'ready_for_pickup',requires_new_extraction:false}]
   await act(async()=>button('Reintentar').click());await settle()
   assert.equal(container.querySelector('[role="alert"]'),null)
   assert.match(container.querySelector('.turnos-tracked').textContent,/Muestra lista para retirar/)
@@ -130,6 +130,18 @@ test('sin turnos pero con estudios en seguimiento no invita a reservar',async()=
   await render('/paciente/turnos')
   assert.doesNotMatch(container.textContent,/No tenés turnos reservados/)
   assert.ok(container.querySelector('.turnos-tracked'))
+})
+
+test('un estudio con turno reservado y muestra anterior tiene una sola tarjeta, con su etapa',async()=>{
+  fake.myAppointments=[appointment]
+  fake.myTrackings=[{study_id:7,code:'EST-000007',status:'turno_sacado',stage:'extraction',requires_new_extraction:false},
+    {study_id:8,code:'EST-000008',status:'requiere_remuestreo',stage:'resample',requires_new_extraction:true}]
+  await render('/paciente/turnos')
+  assert.equal(container.querySelectorAll('.turnos-list li.turnos-card').length,2)
+  assert.equal(container.querySelector('.turnos-list .turnos-minibar').getAttribute('aria-label'),'Etapa 1 de 7: Extracción')
+  const tracked=container.querySelector('.turnos-tracked')
+  assert.doesNotMatch(tracked.textContent,/EST-000007/)
+  assert.ok(tracked.querySelector('a.turnos-action[href="/paciente/turnos/reservar?estudio=8"]'))
 })
 
 test('cada turno de Mis turnos enlaza a su seguimiento',async()=>{

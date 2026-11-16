@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Activity } from 'lucide-react'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
 import { getStudyTracking } from './api.js'
@@ -30,8 +31,9 @@ export default function Seguimiento({ session }) {
 
   const current = STAGES.findIndex(([key]) => key === tracking?.stage)
   const history = tracking?.samples.filter((sample) => sample.status === 'discarded') ?? []
-  return <ClinicalLayout session={session} pageLabel="Seguimiento"><section className="turnos-page">
-    <header className="turnos-header"><h1>Seguimiento</h1><p>En qué etapa está tu estudio y tu muestra.</p></header>
+  return <ClinicalLayout session={session} pageLabel="Seguimiento"><section className="turnos-page turnos-patient">
+    <header className="turnos-heading"><span>SEGUIMIENTO DEL ESTUDIO</span><h1><Activity aria-hidden="true" />Seguimiento</h1>
+      <p>En qué etapa está tu estudio y tu muestra.</p></header>
     {error ? <div role="alert" className="turnos-error"><p>{error}</p><button type="button" onClick={() => { setError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
       : !tracking ? <p role="status" className="turnos-loading">Cargando seguimiento...</p>
         : <article className="turnos-card turnos-appointment" aria-labelledby="turnos-tracking-title">
@@ -39,7 +41,7 @@ export default function Seguimiento({ session }) {
           {tracking.requires_new_extraction ? <div className="turnos-resample">
             <p>La muestra no sirvió para el análisis y hay que tomar una nueva. Es el mismo estudio: no tenés que pagar de nuevo.</p>
             <p><strong>Motivo:</strong> {resampleReason(tracking.samples)}</p>
-            <Link className="turnos-primary-link" to={`/paciente/turnos/reservar?estudio=${tracking.study_id}`}>Sacar turno nuevo</Link>
+            <Link className="turnos-action" to={`/paciente/turnos/reservar?estudio=${tracking.study_id}`}>Sacar turno nuevo</Link>
           </div>
             : <ol className="turnos-stages">{STAGES.map(([key, title, detail], index) =>
               <li key={key} className={index < current ? 'done' : index === current ? 'current' : 'pending'}
