@@ -29,8 +29,8 @@ Fecha: 2026-10-30. Migración `0004`.
 - Tablas `provinces` (nombre único), `extraction_centers` (nombre único por provincia,
   índice en `province_id`, `active` verdadero por defecto) y `holidays` (el día es la clave).
   Los centros son tercerizados y no son usuarios del sistema.
-- Seed optativo y repetible `seed_demo_extraction_centers`. Las 24 jurisdicciones y sus
-  capitales son reales y las coordenadas, aproximadas. Los nombres, direcciones y teléfonos
+- Seed optativo y repetible `back/seeders/logistics.py` (`python -m seeders logistics`). Las
+  24 jurisdicciones y sus capitales son reales y las coordenadas, aproximadas. Los nombres, direcciones y teléfonos
   de los centros son ficticios y dicen "DEMO". Las coordenadas de cada centro son las de su
   capital, desplazadas 0,002° (unos 200 m) por centro para que no se superpongan en el mapa.
   Cada provincia indica en el JSON (`offset`) hacia dónde se desplazan, para alejarse de
