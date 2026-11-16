@@ -136,8 +136,8 @@ class ExtractionService:
 
     def _attended_appointment(self, study_id: int) -> int:
         """El aviso prueba que el paciente fue: un turno reservado pasa a asistido (decisión 011)."""
-        appointment = self.samples.last_appointment(study_id)
-        if appointment is None or appointment["status"] == AppointmentStatus.ABSENT.value:
+        appointment = self.samples.appointment_for_notice(study_id)
+        if appointment is None:
             raise Conflict("El estudio no tiene un turno reservado o asistido para esta extracción.")
         # Condicional, como en turnos: si el paciente cancela a la vez, gana uno solo.
         if (appointment["status"] == AppointmentStatus.BOOKED.value

@@ -24,7 +24,7 @@ from app.use_cases.extraction import (
 )
 from app.use_cases.studies import StudyService
 from appointments_setup import (
-    ADMIN, AUTHORIZED, DOCTOR, OTHER_PATIENT, OTHERS_STUDY, PAID, SOFIA, book, client, login,  # noqa: F401
+    ADMIN, AUTHORIZED, DOCTOR, MONDAY_10, OTHER_PATIENT, OTHERS_STUDY, PAID, SOFIA, book, client, login,  # noqa: F401
     study_status,
 )
 
@@ -211,6 +211,33 @@ def test_resample_keeps_the_same_study_and_history(extraction):
     assert second.appointment_id == rebooked.json()["id"]
     assert count(engine, StudyModel) == studies  # mismo estudio: no se crea otro ni se vuelve a pagar
     assert study_status(engine, PAID) == "listo_para_retirar"
+
+
+def test_resample_with_a_new_appointment_earlier_than_the_attended_one(extraction):
+    # El turno viejo (asistido, muestra descartada) tiene fecha posterior al nuevo reservado:
+    # el aviso tiene que ir al reservado, no al de fecha más tardía.
+    http, engine, _ = extraction
+    old = book(http, starts_at="2026-11-04T10:00:00-03:00").json()["id"]
+    notice(http, "1.9", external_id="bot-1")
+    new = book(http, starts_at=MONDAY_10).json()["id"]
+    assert notice(http, "2.5", external_id="bot-2").status_code == 201
+    first, second = rows(engine, SampleModel)
+    assert (first.appointment_id, second.appointment_id) == (old, new)
+    assert {appointment.id: appointment.status for appointment in rows(engine, AppointmentModel)} == {
+        old: "attended", new: "attended"}
+
+
+def test_an_attended_appointment_that_already_has_a_sample_is_not_reused(extraction):
+    # Remuestreo con el turno nuevo marcado ausente: el aviso no puede colgarse del viejo, que ya tiene muestra.
+    http, engine, _ = extraction
+    book(http, starts_at="2026-11-04T10:00:00-03:00")
+    notice(http, "1.9", external_id="bot-1")
+    new = book(http).json()["id"]
+    http.patch(f"/api/appointments/{new}/attendance", headers=login(http, ADMIN), json={"attended": False})
+    response = notice(http, "2.5", external_id="bot-2")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "El estudio no tiene un turno reservado o asistido para esta extracción."
+    assert count(engine, SampleModel) == 1
 
 
 def test_solicitar_remuestreo_discards_the_current_sample(extraction):

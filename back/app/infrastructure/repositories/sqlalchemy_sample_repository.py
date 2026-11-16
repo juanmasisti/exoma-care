@@ -45,15 +45,20 @@ class SQLAlchemySampleRepository:
             raise NoticeAlreadyReceived() from None
         return notice.id
 
-    def last_appointment(self, study_id: int) -> dict | None:
-        # Un cancelado no cuenta: el último turno que el paciente sostuvo.
-        row = self.session.execute(
+    def appointment_for_notice(self, study_id: int) -> dict | None:
+        # Primero el turno reservado (en remuestreo el nuevo puede ser anterior al viejo ya asistido);
+        # si no hay, uno asistido que todavía no tenga muestra. Cancelados y ausentes no cuentan.
+        without_sample = ~select(SampleModel.id).where(SampleModel.appointment_id == AppointmentModel.id).exists()
+        row = (self._last_appointment(study_id, AppointmentStatus.BOOKED)
+               or self._last_appointment(study_id, AppointmentStatus.ATTENDED, without_sample))
+        return {"id": row.id, "status": row.status} if row is not None else None
+
+    def _last_appointment(self, study_id: int, status: AppointmentStatus, *where):
+        return self.session.execute(
             select(AppointmentModel.id, AppointmentModel.status)
-            .where(AppointmentModel.study_id == study_id,
-                   AppointmentModel.status != AppointmentStatus.CANCELLED.value)
+            .where(AppointmentModel.study_id == study_id, AppointmentModel.status == status.value, *where)
             .order_by(AppointmentModel.starts_at.desc()).limit(1)
         ).first()
-        return {"id": row.id, "status": row.status} if row is not None else None
 
     def add_sample(self, study_id: int, appointment_id: int, notice_id: int, volume_ml: Decimal,
                    status: str, is_current: bool) -> int:
