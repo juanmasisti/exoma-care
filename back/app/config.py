@@ -18,6 +18,21 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./exoma_care.db"
     jwt_secret_key: SecretStr | None = None
+    chatbot_url: str = ''
+    chatbot_apikey: SecretStr = SecretStr('')
+    chatbot_token: SecretStr = SecretStr('')
+
+    @field_validator('chatbot_url')
+    @classmethod
+    def validate_chatbot_url(cls, value):
+        from urllib.parse import urlsplit
+        value = value.strip()
+        if value:
+            parsed = urlsplit(value)
+            if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError('CHATBOT_URL debe ser una URL HTTPS sin credenciales, query ni fragmento.')
+        return value
+
     recorridos_api_url: str = "https://optimizacionapi.vercel.app/api/optimizacion"
     # Laboratorio Central (Calle 62 N° 555, La Plata): partida y destino del recorrido.
     central_lab_latitude: float = -34.921559

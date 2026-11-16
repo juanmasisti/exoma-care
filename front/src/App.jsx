@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import Login from './Login.jsx'
+import PatientChat from './features/chatbot/PatientChat.jsx'
 import PatientsList from './features/pacientes/PatientsList.jsx'
 import PatientForm from './features/pacientes/PatientForm.jsx'
 import PatientDetail from './features/pacientes/PatientDetail.jsx'
@@ -28,6 +29,7 @@ function App() {
     <Route path="/login" element={<Navigate to="/" replace />} />
     <Route path="/catalogo/patologias" element={!session ? <Navigate to="/" replace /> : catalogAccess
       ? <PathologyCatalog session={session} /> : <Navigate to="/portal" replace />} />
+    <Route path="/paciente/consultas" element={patientPortalPage(<PatientChat key={session?.access_token} session={session} />)} />
     <Route path="/paciente/turnos" element={patientPortalPage(<MisTurnos session={session} />)} />
     <Route path="/paciente/turnos/reservar" element={patientPortalPage(<ReservarTurno session={session} />)} />
     <Route path="/paciente/estudios/:studyId/turno" element={patientPortalPage(<DiaExtraccion session={session} />)} />
@@ -36,6 +38,7 @@ function App() {
       {catalogAccess && <Link to="/catalogo/patologias">Consultar catálogo</Link>}
       {session.role === 'patient' && <Link to="/paciente/turnos/reservar">Reservar turno de extracción</Link>}
       {session.role === 'patient' && <p><Link to="/paciente/turnos">Mis turnos</Link></p>}
+      {session.role === 'patient' && <p><Link to="/paciente/consultas">Consultas sobre estudios genéticos</Link></p>}
       <p><button type="button" onClick={() => setSession(null)}>Cerrar sesión</button></p>
     </main>} />
   </Routes>
