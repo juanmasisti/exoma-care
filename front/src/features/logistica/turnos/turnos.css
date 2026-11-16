@@ -60,6 +60,21 @@
 .turnos-documents { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
 .turnos-documents p { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; color: #64748b; }
 .turnos-page .turnos-danger { color: #fff; border-color: #be123c; background: #be123c; }
+.turnos-page .turnos-primary-link { display: inline-block; padding: 10px 16px; border-radius: 8px; color: #fff; background: #4f46e5; font-weight: 700; text-decoration: none; }
+.turnos-resample { padding: 16px; border-radius: 8px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 13px; line-height: 1.6; }
+.turnos-resample p { margin: 0 0 12px; }
+.turnos-stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.turnos-stages li { padding: 10px 14px; border-left: 3px solid #e2e8f0; font-size: 13px; color: #64748b; }
+.turnos-stages li.done { border-color: #4f46e5; color: #334155; }
+.turnos-stages li.current { border-color: #4f46e5; background: #eef2ff; color: #0f172a; }
+.turnos-stages small { display: block; margin-top: 4px; color: #334155; }
+.turnos-history { margin-top: 20px; font-size: 12px; color: #64748b; }
+.turnos-history h3, .turnos-tracked h2 { font-size: 13px; margin: 0 0 8px; }
+.turnos-tracked { margin-top: 24px; }
+.turnos-tracked h3 { font-size: 14px; margin: 0 0 4px; }
+.turnos-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.turnos-links a { padding: 4px 0; }
+.turnos-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
 @media (max-width: 850px) {
   .turnos-page { padding: 20px 16px; }

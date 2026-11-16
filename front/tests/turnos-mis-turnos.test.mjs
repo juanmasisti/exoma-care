@@ -2,14 +2,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { act } from 'react'
-import { appointment, button, container, crumb, fake, render, settle } from './turnos-setup.mjs'
+import { appointment, container, crumb, fake, render, settle } from './turnos-setup.mjs'
 
 test('un error al cargar mis turnos se informa y se puede reintentar',async()=>{
   fake.networkDown=true
   await render('/paciente/turnos')
-  assert.ok(container.querySelector('main [role="alert"]'))
+  // Turnos y seguimiento cargan por separado: cada uno avisa su error y tiene su Reintentar.
+  const retries=[...container.querySelectorAll('main [role="alert"] button')]
+  assert.equal(retries.length,2)
   fake.networkDown=false
-  await act(async()=>button('Reintentar').click());await settle()
+  for(const retry of retries) await act(async()=>retry.click())
+  await settle()
   assert.equal(container.querySelector('main [role="alert"]'),null)
   assert.match(container.textContent,/No tenés turnos reservados/)
 })

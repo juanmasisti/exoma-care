@@ -16,7 +16,7 @@ function dateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-const STATUS_LABELS = { pagado: 'Pagado', autorizado: 'Autorizado' }
+const STATUS_LABELS = { pagado: 'Pagado', autorizado: 'Autorizado', requiere_remuestreo: 'Requiere nueva extracción' }
 
 export default function ReservarTurno({ session }) {
   const [searchParams, setSearchParams] = useSearchParams()

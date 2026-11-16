@@ -31,6 +31,17 @@ const centers = [
   { id: 11, name: 'Centro DEMO 2', address: 'Calle Demo 200, Ciudad Demo', city: 'Ciudad Demo', province_id: 1, latitude: -34.61, longitude: -58.41, phone: null },
 ]
 
+// Seguimiento del estudio 7 como lo devuelve el back; cada prueba cambia etapa, estado y muestras.
+export function tracking(stage='extraction', samples=[], status='turno_sacado') {
+  return { study_id: 7, code: 'EST-000007', status, stage, requires_new_extraction: stage==='resample', samples }
+}
+// Muestra descartada: nace descartada por volumen o, con `reason`, la descarta bioinformática después.
+export function discardedSample(reason=null) {
+  const born = { from_status: null, to_status: reason ? 'ready_for_pickup' : 'discarded', reason: null, at: '2026-11-04T09:20:00-03:00' }
+  const events = reason ? [born, { from_status: 'in_transit_to_korea', to_status: 'discarded', reason, at: '2026-11-20T11:00:00-03:00' }] : [born]
+  return { id: 1, volume_ml: reason ? '2.50' : '1.90', status: 'discarded', is_current: false, events }
+}
+
 function failure(config, status, statusText, detail) {
   return new AxiosError(`Request failed with status code ${status}`, 'ERR_BAD_REQUEST', config, null, { status, statusText, headers: {}, config, data: { detail } })
 }
@@ -54,7 +65,7 @@ beforeEach(() => {
   container=document.createElement('div');document.body.append(container);root=createRoot(container)
   calls=[]
   Object.assign(fake,{networkDown:false,slowDay:null,taken:new Set(),slotTaken:false,studyTaken:false,booked:false,cancelRejected:false,documentRejected:false,
-    eligible:[{id:7,code:'EST-000007',status:'pagado'}],myAppointments:[]})
+    eligible:[{id:7,code:'EST-000007',status:'pagado'}],myAppointments:[],myTrackings:[],myTrackingsDown:false,tracking:tracking()})
   mock.timers.enable({apis:['Date'],now:WEDNESDAY_10})
   api.defaults.adapter=async (config) => {
     calls.push({url:config.url,method:config.method,params:config.params,data:config.data&&JSON.parse(config.data),responseType:config.responseType,authorization:config.headers?.Authorization})
@@ -94,6 +105,11 @@ beforeEach(() => {
       data=new Blob(['%PDF-DEMO'],{type:'application/pdf'})
     }
     else if(config.url==='/appointments/mine') data=fake.myAppointments
+    else if(config.url==='/studies/tracking/mine') {
+      if(fake.myTrackingsDown) throw failure(config,500,'Internal Server Error','No se pudo cargar el seguimiento.')
+      data=fake.myTrackings
+    }
+    else if(config.url==='/studies/7/tracking') data=fake.tracking
     else if(config.url==='/studies/999/appointment') throw failure(config,404,'Not Found','El estudio no existe o no es tuyo.')
     // Como el back: un estudio con turno vigente deja de ser elegible.
     else if(config.url==='/appointments/eligible-studies') data=fake.eligible.filter((study)=>!(fake.booked&&study.id===7))

@@ -19,6 +19,12 @@ export async function cancelAppointment(appointmentId) {
 export async function listMyAppointments() {
   return (await api.get('/appointments/mine')).data
 }
+export async function getStudyTracking(studyId) {
+  return (await api.get(`/studies/${studyId}/tracking`)).data
+}
+export async function listMyTrackings() {
+  return (await api.get('/studies/tracking/mine')).data
+}
 export async function listEligibleStudies() {
   return (await api.get('/appointments/eligible-studies')).data
 }
