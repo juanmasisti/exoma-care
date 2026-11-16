@@ -144,6 +144,30 @@ test('un estudio con turno reservado y muestra anterior tiene una sola tarjeta, 
   assert.ok(tracked.querySelector('a.turnos-action[href="/paciente/turnos/reservar?estudio=8"]'))
 })
 
+test('el botón principal depende del momento: turno reservado, sin turno o remuestreo',async()=>{
+  const primary=(card)=>[...card.querySelectorAll('a.turnos-action')].map((a)=>a.textContent)
+  const secondary=(card)=>[...card.querySelectorAll('a.turnos-action-secondary')].map((a)=>a.textContent)
+  fake.myAppointments=[appointment]
+  fake.myTrackings=[{study_id:8,code:'EST-000008',status:'listo_para_retirar',stage:'ready_for_pickup',requires_new_extraction:false},
+    {study_id:9,code:'EST-000009',status:'requiere_remuestreo',stage:'resample',requires_new_extraction:true}]
+  await render('/paciente/turnos')
+  const [booked,ready,resample]=container.querySelectorAll('li.turnos-card')
+  assert.deepEqual([primary(booked),secondary(booked)],[['Ver turno'],['Ver seguimiento']])
+  assert.deepEqual([primary(ready),secondary(ready)],[['Ver seguimiento'],[]])
+  assert.deepEqual([primary(resample),secondary(resample)],[['Sacar turno nuevo'],['Ver seguimiento']])
+})
+
+test('en Día de extracción con turno reservado el seguimiento es secundario',async()=>{
+  fake.booked=true
+  await render('/paciente/estudios/7/turno')
+  assert.equal(container.querySelector(`a[href="${TRACKING}"]`).className,'turnos-action-secondary')
+})
+
+test('en Día de extracción sin turno el seguimiento es el botón principal',async()=>{
+  await render('/paciente/estudios/7/turno')
+  assert.equal(container.querySelector(`a[href="${TRACKING}"]`).className,'turnos-action')
+})
+
 test('cada turno de Mis turnos enlaza a su seguimiento',async()=>{
   fake.myAppointments=[appointment]
   await render('/paciente/turnos')

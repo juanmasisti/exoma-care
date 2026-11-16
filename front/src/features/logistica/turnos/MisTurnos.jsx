@@ -42,9 +42,10 @@ export default function MisTurnos({ session }) {
               <dt>Hora</dt><dd>{timeLabel(appointment.starts_at)}</dd>
               <dt>Centro</dt><dd>{appointment.center.name}<small>{appointment.center.address}, {appointment.center.city}</small></dd>
             </dl>
+            {/* Botón principal según el momento: con turno reservado, el turno (orden y consentimiento). */}
             <div className="turnos-links">
-              <Link className="turnos-action" to={`/paciente/estudios/${appointment.study_id}/seguimiento`}>Ver seguimiento</Link>
-              <Link className="turnos-action-secondary" to={`/paciente/estudios/${appointment.study_id}/turno`}>Ver turno</Link>
+              <Link className="turnos-action" to={`/paciente/estudios/${appointment.study_id}/turno`}>Ver turno</Link>
+              <Link className="turnos-action-secondary" to={`/paciente/estudios/${appointment.study_id}/seguimiento`}>Ver seguimiento</Link>
             </div>
           </li>)}</ul>}
     {trackings.error ? <div role="alert" className="turnos-error turnos-tracked"><p>{trackings.error}</p><button type="button" onClick={trackings.reload}>Reintentar</button></div>
