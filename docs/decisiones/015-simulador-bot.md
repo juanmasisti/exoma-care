@@ -44,6 +44,19 @@ Fecha: 17/11/2026. Área de logística (Ivo).
   1,9 como inválido por redondeo y el formulario no se enviaba; un navegador podría hacer lo
   mismo. Los dos decimales los valida el back (422).
 
+- **Turnos DEMO en el seeder de logística** (`seed_demo_booked_studies`): deja 3 estudios de la
+  paciente DEMO con turno reservado. Los estudios se crean con los servicios de estudios
+  (`StudyRequestService.crear`, `emitir_presupuesto`, `StudyPaymentService.elegir_modalidad`
+  particular y `pagar` sin cupón) y el turno con `AppointmentService.reservar`: no se escribe a
+  mano en ninguna tabla. No se marcan: la solicitud no tiene un campo libre (como indicación
+  clínica) y no se inventó uno; se cuentan todos los turnos reservados de la paciente DEMO y se
+  crean los que falten hasta 3 (decisión de Ivo). Patología Fabry con el mismo código que el
+  catálogo DEMO (`fabry`; no hay referencia a esa tabla), con un catálogo de genes fijo detrás
+  de `GeneCatalogGateway` para no depender de Apigen. Obras sociales y cupones no se usan en el
+  pago particular sin cupón. Si una corrida falla entre el pago y la reserva, ese estudio queda
+  `pagado` sin turno y la siguiente crea otro (no se reutiliza para no tomar los `pagado` del
+  seeder de estudios).
+
 ## Pendiente y abierto
 
 - Cuando exista la orden del día (T04), la lista del simulador podría salir de ahí.

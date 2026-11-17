@@ -416,6 +416,13 @@ El ítem del menú aparece solo si la lista responde: el front pregunta al back 
 sesión y no hay otro interruptor. Un cambio de `DEMO_TOOLS_ENABLED` se ve en el menú al recargar
 la página o volver a iniciar sesión; si esa consulta falla, el ítem no aparece hasta entonces.
 
+Turnos DEMO para el simulador: `python -m seeders logistics` (desde `back/`) deja a la paciente
+DEMO (DNI 45000001) con 3 estudios con turno reservado. Cuenta sus turnos reservados y crea los
+que falten, así que repone los que se usaron en el simulador y correrlo dos veces no duplica
+nada. Cada estudio pasa por el flujo de estudios (solicitud de Fabry, presupuesto y pago
+particular simulado) y por la reserva de turnos (10:00, primeros días hábiles libres, primer
+centro DEMO). El catálogo de genes es fijo (Fabry, gen GLA): el seeder no consulta Apigen.
+
 Para probarlo: `DEMO_TOOLS_ENABLED=true` en `back/.env` (vale desde el pedido siguiente, sin
 reiniciar el back), reservar un turno
 como paciente, entrar como administrativo y elegir "Simular aviso del bot". Con menos de 2 ml el
