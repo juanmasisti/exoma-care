@@ -23,6 +23,9 @@ from app.use_cases.studies import StudyService
 
 router = APIRouter(prefix="/api", tags=["extracción"])
 patient = require_roles(UserRole.PATIENT)
+StudyCode = Annotated[str, Field(min_length=1, max_length=20)]
+# Finito, positivo y con 2 decimales: 1.999 no se redondea a 2.00 y pasa como válida.
+VolumeMl = Annotated[Decimal, Field(gt=0, max_digits=5, decimal_places=2, allow_inf_nan=False)]
 
 
 def get_resample_notifier(session: Session = Depends(get_database_session)):
@@ -59,9 +62,8 @@ def http_errors():
 class ExtractionNoticeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     external_id: Annotated[str, Field(min_length=1, max_length=100)]
-    study_code: Annotated[str, Field(min_length=1, max_length=20)]
-    # Finito, positivo y con 2 decimales: 1.999 no se redondea a 2.00 y pasa como válida.
-    volume_ml: Annotated[Decimal, Field(gt=0, max_digits=5, decimal_places=2, allow_inf_nan=False)]
+    study_code: StudyCode
+    volume_ml: VolumeMl
     taken_at: AwareDatetime
 
 

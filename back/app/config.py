@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     fedex_pass: SecretStr | None = None
     # Secreto compartido con el bot de extracción (header X-Webhook-Secret). Sin valor, el webhook rechaza todo.
     extraction_webhook_secret: SecretStr | None = None
+    # Herramientas de demo (simulador del bot en la app). Apagadas: sus endpoints dan 404.
+    demo_tools_enabled: bool = False
 
     @field_validator("extraction_webhook_secret", mode="before")
     @classmethod
