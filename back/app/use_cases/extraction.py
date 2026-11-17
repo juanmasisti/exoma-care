@@ -127,6 +127,13 @@ class ExtractionService:
                 "stage": tracking_stage(status, current),
                 "requires_new_extraction": status == REQUIRES_RESAMPLE, "samples": samples}
 
+    def estudios_esperando_aviso(self) -> list[dict]:
+        """Turnos reservados: los estudios a los que todavía les puede llegar el aviso (simulador, T03d)."""
+        return [{"study_id": appointment["study_id"], "code": appointment["study_code"],
+                 "patient_name": f"{appointment['patient']['first_name']} {appointment['patient']['last_name']}",
+                 "center_name": appointment["center"]["name"], "starts_at": appointment["starts_at"]}
+                for appointment in self.appointments.booked()]
+
     def mis_seguimientos(self, user_id: int) -> list[dict]:
         """Estudios propios con alguna muestra: el turno ya pasó y "Mis turnos" no los muestra."""
         return [{"study_id": study["id"], "code": study_code(study["id"]), "status": study["status"],

@@ -382,3 +382,51 @@ menos de 2 ml (si avisos tarda, el simulador puede cortar a los 5 s aunque el ba
 
 Pruebas: `back/tests/test_extraction_api.py` (con un doble del caso de uso: ninguna sale a
 internet). Detalles en la [decisión 014](decisiones/014-aviso-remuestreo.md).
+
+## Simulador del bot de extracción (T03d)
+
+SIMULACIÓN para demo y pruebas: el administrativo manda, desde la app, el mismo aviso que
+mandaría el bot cuando un centro toma la muestra. Está apagado por defecto.
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| GET /api/demo/extraction-notice/studies | `lab_administrator` | Turnos reservados: `study_id`, `code`, `patient_name`, `center_name`, `starts_at` |
+| POST /api/demo/extraction-notice | `lab_administrator` | Simula el aviso del bot para un estudio |
+
+- **Interruptor**: `DEMO_TOOLS_ENABLED=true` en `back/.env` (por defecto `false`). Apagado, los
+  dos endpoints responden 404 (antes de pedir sesión) y el menú no muestra la pantalla.
+- **Aviso simulado**: cuerpo `{"study_code": "EST-000001", "volume_ml": 1.5}`. Se procesa con el
+  mismo caso de uso que `POST /api/webhooks/extraction` (`ExtractionService.registrar_aviso`),
+  con `external_id` `sim-<uuid>` y la hora actual como `taken_at`. Mismas reglas, misma
+  respuesta (201 con `sample_id`, `sample_status`, `study_status`), mismos errores (404, 409,
+  422) y el mismo mail de remuestreo (T03c). No usa el secreto del webhook.
+- 401 sin sesión y 403 con otro rol.
+
+### Pantalla
+
+"Simular aviso del bot" en `/administrativo/simulador-bot` (solo `lab_administrator`), con la
+etiqueta SIMULACIÓN. Se elige un estudio con turno reservado, se carga el volumen en ml y
+"Enviar aviso" muestra el resultado en palabras: "Muestra lista para retirar" o "Hay que
+repetir la extracción" (con el aviso por mail al paciente). El estudio avisado sale de la
+lista porque su turno queda asistido. Estados: carga; error al cargar con "Reintentar" (salvo
+apagado: "El simulador está apagado en este servidor."); error del envío con el mensaje del
+back; y vacío.
+
+El ítem del menú aparece solo si la lista responde: el front pregunta al back una vez por
+sesión y no hay otro interruptor. Un cambio de `DEMO_TOOLS_ENABLED` se ve en el menú al recargar
+la página o volver a iniciar sesión; si esa consulta falla, el ítem no aparece hasta entonces.
+
+Turnos DEMO para el simulador: `python -m seeders logistics` (desde `back/`) deja a la paciente
+DEMO (DNI 45000001) con 3 estudios con turno reservado. Cuenta sus turnos reservados y crea los
+que falten, así que repone los que se usaron en el simulador y correrlo dos veces no duplica
+nada. Cada estudio pasa por el flujo de estudios (solicitud de Fabry, presupuesto y pago
+particular simulado) y por la reserva de turnos (10:00, primeros días hábiles libres, primer
+centro DEMO). El catálogo de genes es fijo (Fabry, gen GLA): el seeder no consulta Apigen.
+
+Para probarlo: `DEMO_TOOLS_ENABLED=true` en `back/.env` (vale desde el pedido siguiente, sin
+reiniciar el back), reservar un turno
+como paciente, entrar como administrativo y elegir "Simular aviso del bot". Con menos de 2 ml el
+estudio queda en remuestreo y se manda el mail.
+
+Pruebas: `back/tests/test_demo_extraction_api.py` y `front/tests/simulador-bot.test.mjs`.
+Detalles en la [decisión 015](decisiones/015-simulador-bot.md).

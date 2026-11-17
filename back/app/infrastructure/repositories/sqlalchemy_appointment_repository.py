@@ -80,6 +80,11 @@ class SQLAlchemyAppointmentRepository:
             AppointmentModel.study_id == study_id, AppointmentModel.status == BOOKED)).first()
         return self._record(row) if row is not None else None
 
+    def booked(self) -> list[dict]:
+        rows = self.session.execute(self._select().where(AppointmentModel.status == BOOKED)
+                                    .order_by(AppointmentModel.starts_at))
+        return [self._record(row) for row in rows]
+
     def booked_for_user(self, user_id: int) -> list[dict]:
         rows = self.session.execute(self._select().where(
             Paciente.usuario_id == user_id, AppointmentModel.status == BOOKED).order_by(AppointmentModel.starts_at))
