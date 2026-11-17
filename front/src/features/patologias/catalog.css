@@ -112,3 +112,8 @@
 @media (max-width: 1050px) and (min-width: 851px) { .catalog-layout { grid-template-columns: 1fr; } .catalog-pathology-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); } .catalog-summary { grid-template-columns: 1fr; gap: 8px; } .catalog-summary > div { padding: 10px 14px; } .catalog-summary > div > span:last-child { display: flex; gap: 10px; align-items: center; } }
 @media (max-width: 850px) { .catalog-page { padding: 24px 20px; } }
 @media (max-width: 650px) { .catalog-page { padding: 24px 16px; } .catalog-layout { grid-template-columns: 1fr; } .catalog-summary { grid-template-columns: 1fr; gap: 8px; } .catalog-summary > div { padding: 12px 14px; } .catalog-summary > div > span:last-child { display: flex; align-items: center; gap: 10px; } .catalog-header-actions { width: 100%; } .catalog-header-actions > button { flex: 1; } .catalog-card { padding: 20px 16px; } .catalog-sidebar { padding: 18px 16px 0; } .catalog-sidebar-note { margin-inline: -16px; padding-inline: 16px; } .catalog-pathology-list { max-height: 260px; overflow-y: auto; } .catalog-checker-actions, .catalog-form-footer { flex-wrap: wrap; } .catalog-form-footer > button, .catalog-checker-actions > button { width: 100%; } .term-picker { padding: 14px 12px; } .catalog-welcome { min-height: 290px; padding: 32px 20px; } }
+
+.catalog-external input[type="checkbox"] { width: auto; min-height: auto; margin-right: 8px; }
+.catalog-external details { margin-top: 16px; }
+.catalog-external summary { cursor: pointer; font-weight: 600; }
+.catalog-external label { margin-top: 12px; }

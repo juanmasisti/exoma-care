@@ -23,9 +23,9 @@ LOGISTICS_TABLES = {"provinces", "extraction_centers", "holidays"}
 FAMILY_TABLES = {"patient_family_records", "family_members", "family_member_symptoms", "family_member_diagnoses", "patient_family_revisions"}
 # Migraciones posteriores a 0005: esta herramienta solo llega a 0005; lo que sigue es alembic upgrade.
 REVISIONS_AFTER_0005 = {
-    "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"
+    "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015"
 }
-TABLES_AFTER_0005 = {"studies", "notification_logs", "appointments", "extraction_notices", "samples", "sample_events"}
+TABLES_AFTER_0005 = {"studies", "notification_logs", "appointments", "extraction_notices", "samples", "sample_events", "familiogram_documents"}
 
 
 def _require_schema(connection, metadata):
@@ -37,7 +37,16 @@ def _metadata_without(excluded):
     metadata = MetaData()
     for table in Base.metadata.sorted_tables:
         if table.name not in excluded:
-            table.to_metadata(metadata)
+            historical = table.to_metadata(metadata)
+            # Compare the 0005 schema, not columns introduced by later integrations.
+            later_columns = {"pathologies": {"apigen_code", "apigen_group", "cdss_code"},
+                             "family_members": {"diagram_details"}}.get(table.name, set())
+            for constraint in list(historical.constraints):
+                if any(column.name in later_columns for column in constraint.columns):
+                    historical.constraints.remove(constraint)
+            for column_name in later_columns:
+                if column_name in historical.c:
+                    historical._columns.remove(historical.c[column_name])
     return metadata
 
 

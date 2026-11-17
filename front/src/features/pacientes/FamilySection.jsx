@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Clock, Edit3, Info, Plus, Save, Users } from 'lucide-react'
+import { Clock, Edit3, Plus, Save, Users } from 'lucide-react'
 import { errorMessage } from '../../services/api.js'
 import { listPathologies } from '../patologias/api.js'
 import SymptomPicker from '../patologias/SymptomPicker.jsx'
-import { getFamily, getFamilyHistory, saveFamily } from './familyApi.js'
+import { getFamily, getFamilyHistory, saveFamily, getRelationships } from './familyApi.js'
 import './family.css'
+import FamiliogramPanel from './FamiliogramPanel.jsx'
 
 const relationships = { mother: 'Madre', father: 'Padre', sibling: 'Hermano/a', child: 'Hijo/a', aunt_uncle: 'Tío/a', grandparent: 'Abuelo/a', cousin: 'Primo/a', other: 'Otro parentesco' }
+const diagramRelationships = { mother: [1], father: [1], sibling: [2, 10, 11], child: [9], aunt_uncle: [5, 6], grandparent: [3, 4], cousin: [7, 8], other: [12, 13, 14, 15] }
 const diagnosisLabels = { unknown: 'Sin información diagnóstica', none: 'Sin diagnóstico conocido', known: 'Diagnóstico conocido' }
-const blankMember = () => ({ full_name: '', relationship: '', relationship_detail: '', symptom_ids: [], diagnosis_status: 'unknown', diagnosis_ids: [], symptoms: [], diagnoses: [], notes: '' })
-const toRequest = (member) => Object.fromEntries(['full_name', 'relationship', 'relationship_detail', 'symptom_ids', 'diagnosis_status', 'diagnosis_ids', 'notes'].map(key => [key, member[key]]))
+const blankMember = () => ({ full_name: '', relationship: '', relationship_detail: '', symptom_ids: [], diagnosis_status: 'unknown', diagnosis_ids: [], symptoms: [], diagnoses: [], notes: '', first_name: '', last_name: '', provider_relationship: null, sex: 'no_identificado', age: null, deceased: false })
+const toRequest = (member) => Object.fromEntries(['full_name', 'relationship', 'relationship_detail', 'symptom_ids', 'diagnosis_status', 'diagnosis_ids', 'notes', 'first_name', 'last_name', 'provider_relationship', 'sex', 'age', 'deceased'].map(key => [key, member[key]]))
 
 function FamilyMemberSummary({ member }) {
   return <><div className="family-member-heading"><strong>{member.full_name}</strong><span className="patient-type">{relationships[member.relationship] || member.relationship}</span></div>
@@ -20,8 +22,8 @@ function FamilyMemberSummary({ member }) {
   </>
 }
 
-function MemberEditor({ initial, catalog, editing, onConfirm, onCancel }) {
-  const [form, setForm] = useState(initial)
+function MemberEditor({ initial, catalog, relationshipsCatalog, editing, onConfirm, onCancel }) {
+  const [form, setForm] = useState({ ...blankMember(), ...initial })
   const [error, setError] = useState('')
   function change(key, value) { setForm(previous => ({ ...previous, [key]: value })); setError('') }
   function submit(event) {
@@ -35,9 +37,17 @@ function MemberEditor({ initial, catalog, editing, onConfirm, onCancel }) {
     <h3>{editing ? 'Editar antecedente familiar' : 'Agregar antecedente familiar'}</h3>
     {error && <p role="alert" className="patient-error">{error}</p>}
     <div className="patient-fields-grid"><div><label htmlFor="family-name">Nombre del familiar <span aria-hidden="true">*</span></label><input id="family-name" value={form.full_name} maxLength={200} required onChange={e => change('full_name', e.target.value)} /></div>
-      <div><label htmlFor="family-relationship">Parentesco <span aria-hidden="true">*</span></label><select id="family-relationship" value={form.relationship} required onChange={e => change('relationship', e.target.value)}><option value="">Seleccionar parentesco</option>{Object.entries(relationships).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <div><label htmlFor="family-relationship">Parentesco <span aria-hidden="true">*</span></label><select id="family-relationship" value={form.relationship} required onChange={e => { setForm(previous => ({ ...previous, relationship: e.target.value, provider_relationship: null })); setError('') }}><option value="">Seleccionar parentesco</option>{Object.entries(relationships).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
       {form.relationship === 'other' && <div><label htmlFor="family-relationship-detail">Aclaración del parentesco <span aria-hidden="true">*</span></label><input id="family-relationship-detail" value={form.relationship_detail} maxLength={100} required onChange={e => change('relationship_detail', e.target.value)} /></div>}
     </div>
+    <fieldset className="patient-field-space"><legend>Datos para el familiograma</legend><p className="patient-help">Para generar el familiograma necesitás nombres, apellidos y parentesco del familiograma de cada familiar. Podés guardar antecedentes sin completarlos todavía. La edad es opcional; el sexo de los progenitores permite ubicar las ramas materna y paterna.</p>
+      <label htmlFor="family-first-name">Nombres (obligatorio para generar)</label><input id="family-first-name" value={form.first_name} maxLength={100} onChange={e => change('first_name', e.target.value)} />
+      <label htmlFor="family-last-name">Apellidos (obligatorio para generar)</label><input id="family-last-name" value={form.last_name} maxLength={100} onChange={e => change('last_name', e.target.value)} />
+      <label htmlFor="family-provider-relationship">Parentesco del familiograma (obligatorio para generar)</label><select id="family-provider-relationship" value={form.provider_relationship ?? ''} onChange={e => change('provider_relationship', e.target.value === '' ? null : Number(e.target.value))}><option value="">Sin completar</option>{relationshipsCatalog.filter(r => diagramRelationships[form.relationship]?.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.parentesco}</option>)}</select>
+      <label htmlFor="family-sex">Sexo para el símbolo y rama familiar</label><select id="family-sex" value={form.sex} onChange={e => change('sex', e.target.value)}><option value="no_identificado">No identificado</option><option value="mujer">Mujer</option><option value="hombre">Hombre</option></select>
+      <label htmlFor="family-age">Edad (al fallecer si corresponde)</label><input id="family-age" type="number" min="0" max="150" step="any" value={form.age ?? ''} onChange={e => change('age', e.target.value === '' ? null : Number(e.target.value))} />
+      <label className="family-deceased"><input type="checkbox" checked={form.deceased} onChange={e => change('deceased', e.target.checked)} />Fallecido/a</label>
+    </fieldset>
     <div className="patient-field-space"><SymptomPicker label="Síntomas del familiar" multiple selected={form.symptoms} onChange={symptoms => { setForm(previous => ({ ...previous, symptoms, symptom_ids: symptoms.map(s => s.id) })); setError('') }} /></div>
     <div className="patient-field-space"><label htmlFor="family-diagnosis-status">Información diagnóstica</label><select id="family-diagnosis-status" value={form.diagnosis_status} onChange={e => { setForm(previous => ({ ...previous, diagnosis_status: e.target.value, diagnosis_ids: e.target.value === 'known' ? previous.diagnosis_ids : [], diagnoses: [] })); setError('') }}>{Object.entries(diagnosisLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
     {form.diagnosis_status === 'known' && <fieldset className="patient-pathology-fieldset"><legend>Patologías con diagnóstico conocido</legend><p className="patient-help">Registrá antecedentes informados. Esta sección no diagnostica ni valida una sospecha a partir de síntomas.</p><div className="patient-pathology-options">{catalog.map(p => <label key={p.id}><input type="checkbox" checked={form.diagnosis_ids.includes(p.id)} onChange={() => change('diagnosis_ids', form.diagnosis_ids.includes(p.id) ? form.diagnosis_ids.filter(id => id !== p.id) : [...form.diagnosis_ids, p.id])} /><span>{p.name}</span></label>)}</div>{catalog.length === 0 && <p>No hay patologías disponibles en el catálogo.</p>}</fieldset>}
@@ -49,6 +59,14 @@ function MemberEditor({ initial, catalog, editing, onConfirm, onCancel }) {
 export default function FamilySection({ patientId, active }) {
   const [family, setFamily] = useState(null)
   const [catalog, setCatalog] = useState([])
+  const [relationshipsCatalog, setRelationshipsCatalog] = useState([])
+  const [relationshipError, setRelationshipError] = useState('')
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    getRelationships(patientId).then(data => { if (!cancelled) { setRelationshipsCatalog(data); setRelationshipError('') } }).catch(e => { if (!cancelled) setRelationshipError(errorMessage(e)) })
+    return () => { cancelled = true }
+  }, [active, patientId])
   const [draft, setDraft] = useState([])
   const [editing, setEditing] = useState(false)
   const [editor, setEditor] = useState(null)
@@ -104,7 +122,7 @@ export default function FamilySection({ patientId, active }) {
   if (!active && !family) return null
   return <section id="patient-family-panel" role="tabpanel" aria-labelledby="tab-family" hidden={!active} className="patient-card family-section">
     <header className="family-heading"><div><div className="patient-section-heading"><Users size={20} aria-hidden="true" /><h2>Información familiar</h2></div><p className="patient-help">Antecedentes opcionales referidos por el paciente. Los familiares no reciben una cuenta ni se registran como pacientes.</p></div>{family && !editing && <button type="button" onClick={begin}><Edit3 size={15} aria-hidden="true" />Editar familiares</button>}</header>
-    <aside className="patient-demo-note"><Info size={17} aria-hidden="true" /><span>PDF del familiograma pendiente de integración con su API externa. No hay un PDF generado ni una conexión simulada. Los conceptos DEMO conservan su identificación de demostración.</span></aside>
+    {relationshipError && <p className="patient-help">Parentescos del generador no disponibles: {relationshipError}. Podés seguir guardando antecedentes familiares.</p>}
     {notice && <p role="status" className="patient-success">{notice}</p>}
     {error && <p role="alert" className="patient-error">{error}</p>}
     {!family ? error ? <button type="button" onClick={() => { setError(''); setRetry(n => n + 1) }}>Reintentar carga familiar</button> : <p role="status">Cargando información familiar...</p> : <>
@@ -112,12 +130,13 @@ export default function FamilySection({ patientId, active }) {
       <fieldset className="family-controls" disabled={busy}>
         {(editing ? draft : family.members).length === 0 ? <div className="family-empty"><Users size={28} aria-hidden="true" /><h3>{editing ? 'La lista familiar está vacía' : 'Todavía no hay familiares registrados'}</h3><p className="patient-help">Podés dejar esta sección vacía. No impide el alta ni modifica la validación clínica.</p></div> : <div className="family-members">{(editing ? draft : family.members).map((member, index) => <article className="family-member" key={index}><FamilyMemberSummary member={member} />{editing && !editor && <div className="family-actions"><button type="button" onClick={() => setEditor({ index, data: { ...member } })}>Editar {member.full_name}</button><button type="button" className="family-remove" onClick={() => setDraft(previous => previous.filter((_, i) => i !== index))}>Quitar {member.full_name}</button></div>}</article>)}</div>}
         {editing && <>
-          {editor ? <MemberEditor key={editor.index ?? 'new'} initial={editor.data} catalog={catalog} editing={editor.index != null} onConfirm={confirmMember} onCancel={() => setEditor(null)} /> : <button type="button" disabled={draft.length >= 50} onClick={() => setEditor({ index: null, data: blankMember() })}><Plus size={16} aria-hidden="true" />Agregar familiar</button>}
+          {editor ? <MemberEditor key={editor.index ?? 'new'} initial={editor.data} catalog={catalog} relationshipsCatalog={relationshipsCatalog} editing={editor.index != null} onConfirm={confirmMember} onCancel={() => setEditor(null)} /> : <button type="button" disabled={draft.length >= 50} onClick={() => setEditor({ index: null, data: blankMember() })}><Plus size={16} aria-hidden="true" />Agregar familiar</button>}
           <p className="patient-help">Los cambios de la lista, incluidas las bajas, se aplican al guardar. Las versiones anteriores se conservan. Máximo 50 familiares por ficha.</p>
           <div className="family-actions"><button type="button" onClick={cancel}>Cancelar edición</button><button type="button" className="patient-primary" disabled={Boolean(editor)} onClick={save}><Save size={15} aria-hidden="true" />{busy ? 'Guardando...' : 'Guardar información familiar'}</button></div>
         </>}
         {conflict && <div className="family-conflict"><p>Tu borrador se conserva. Consultá lo que está guardado para comparar antes de decidir.</p><button type="button" onClick={compare}>Consultar versión actual</button>{remote && <><h3>Versión guardada {remote.version}</h3>{remote.members.length ? remote.members.map((m, i) => <article className="family-member" key={i}><FamilyMemberSummary member={m} /></article>) : <p>No hay familiares en la versión guardada.</p>}<p>Si conservás tu borrador, al guardar reemplazarás la lista mostrada arriba. Revisá e incorporá los cambios del otro profesional que quieras mantener antes de confirmar.</p><div className="family-actions"><button type="button" onClick={() => { setFamily(remote); setRemote(null); setConflict(false); setError(''); setNotice('Borrador conservado sobre la versión consultada. Revisá la lista antes de guardar; los cambios posteriores de otros médicos seguirán generando conflicto.') }}>Continuar con mi borrador sobre la versión actual</button><button type="button" onClick={() => { setFamily(remote); cancel() }}>Usar versión actual y descartar mi borrador</button></div></>}</div>}
       </fieldset>
+      <FamiliogramPanel key={patientId} patientId={patientId} familyVersion={family.version} editing={editing} active={active} members={family.members} />
       <div className="family-history"><button type="button" disabled={busy || historyLoading} onClick={showHistory}><Clock size={15} aria-hidden="true" />{historyLoading ? 'Cargando historial...' : historyOpen ? 'Ocultar historial familiar' : 'Ver historial familiar'}</button>{historyOpen && <div><h3>Historial familiar</h3>{history?.length === 0 ? <p className="patient-help">Todavía no se guardaron revisiones familiares.</p> : history?.map(revision => <details className="patient-revision" key={revision.version}><summary>Versión familiar {revision.version} · {new Date(revision.changed_at).toLocaleDateString('es-AR')}</summary><p className="patient-help">Profesional: {revision.changed_by_name}</p>{revision.members.length ? revision.members.map((member, index) => <article className="family-member" key={index}><FamilyMemberSummary member={member} /></article>) : <p className="patient-help">Se guardó la sección familiar vacía.</p>}</details>)}</div>}</div>
     </>}
   </section>

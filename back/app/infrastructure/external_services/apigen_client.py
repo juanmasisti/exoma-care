@@ -31,6 +31,43 @@ class ApigenClient:
         self._transport = transport
         self._list_cache = list_cache if list_cache is not None else apigen_list_cache
 
+    async def listar_patologias(self, grupo_id: str) -> list[dict[str, Any]]:
+        from pydantic import TypeAdapter, ValidationError
+        from app.infrastructure.external_services.clinical_contracts import GeneticPathology
+        payload = await self._clinical_request("POST", "/rpc/listar_patologias", json={"p_grupo_id": grupo_id})
+        try:
+            return [item.model_dump() for item in TypeAdapter(list[GeneticPathology]).validate_python(payload)]
+        except ValidationError as exc:
+            raise ExternalServiceError("Apigen", "Apigen devolvió un catálogo inválido.", 502) from exc
+
+    async def buscar_genes(self, query: str) -> list[str]:
+        payload = await self._clinical_request("GET", "/gen", params={"simbolo": f"ilike.{query}*", "select": "simbolo", "limit": "20"})
+        if not isinstance(payload, list) or any(not isinstance(item, dict) or not isinstance(item.get("simbolo"), str) for item in payload):
+            raise ExternalServiceError("Apigen", "Apigen devolvió genes inválidos.", 502)
+        return [item["simbolo"] for item in payload]
+
+    async def alta_patologia(self, grupo_id: str, codigo: str, nombre: str, genes: list[str], herencia: str) -> dict[str, Any]:
+        from pydantic import TypeAdapter, ValidationError
+        from app.infrastructure.external_services.clinical_contracts import GeneticPathology
+        payload = await self._clinical_request("POST", "/rpc/alta_patologia", json={
+            "p_grupo_id": grupo_id, "p_codigo": codigo, "p_nombre": nombre,
+            "p_genes": genes, "p_herencia": herencia,
+        })
+        try:
+            records = TypeAdapter(list[GeneticPathology]).validate_python(payload)
+            if len(records) != 1 or records[0].codigo != codigo:
+                raise ValueError("identity mismatch")
+            return records[0].model_dump() | {"de_grupo": True}
+        except (ValidationError, ValueError) as exc:
+            raise ExternalServiceError("Apigen", "No se pudo verificar el alta. Actualizá el catálogo externo antes de reintentar.", 502) from exc
+
+    async def _clinical_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            return await self._request(method, path, **kwargs)
+        except ExternalServiceError as exc:
+            # Provider errors may echo credentials or submitted payloads.
+            raise ExternalServiceError("Apigen", "No se pudo completar la consulta a Apigen. Revisá los datos o reintentá más tarde.", 503 if exc.status_code >= 500 else 502) from None
+
     async def buscar_variantes(
         self,
         gen: str,

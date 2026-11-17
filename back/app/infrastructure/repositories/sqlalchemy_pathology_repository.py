@@ -1,6 +1,6 @@
 import unicodedata
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -19,6 +19,7 @@ def pathology_record(model: PathologyModel) -> Pathology:
     return Pathology(
         model.id, model.name, symptom_record(model.cardinal_symptom),
         tuple(symptom_record(s) for s in model.secondary_symptoms),
+        model.apigen_code, model.apigen_group, model.cdss_code,
     )
 
 
@@ -63,6 +64,29 @@ class SQLAlchemyPathologyRepository:
             return True
         found = set(self.session.scalars(select(SymptomModel.id).where(SymptomModel.id.in_(ids))))
         return found == ids
+
+    def link_external(self, pathology_id: int, apigen_code: str, apigen_group: str, cdss_code: str | None) -> Pathology:
+        model = self.session.get(PathologyModel, pathology_id)
+        if model is None:
+            raise LookupError("La patología no existe.")
+        if model.apigen_code is not None and (model.apigen_code, model.apigen_group, model.cdss_code) != (apigen_code, apigen_group, cdss_code):
+            raise ValueError("La identidad externa ya está asociada y no puede reemplazarse.")
+        try:
+            changed = self.session.execute(update(PathologyModel).where(
+                PathologyModel.id == pathology_id, PathologyModel.apigen_code.is_(None)
+            ).values(apigen_code=apigen_code, apigen_group=apigen_group, cdss_code=cdss_code))
+            if changed.rowcount == 0:
+                self.session.expire_all()
+                current = self.session.get(PathologyModel, pathology_id)
+                if current is None or (current.apigen_code, current.apigen_group, current.cdss_code) != (apigen_code, apigen_group, cdss_code):
+                    self.session.rollback()
+                    raise ValueError("La identidad fue asociada por otra operación. Actualizá el catálogo.")
+            self.session.commit()
+        except IntegrityError:
+            self.session.rollback()
+            raise ValueError("La identidad externa ya está asociada a otra patología local.") from None
+        self.session.expire_all()
+        return self.get_pathology(pathology_id)
 
     def save(self, definition: PathologyDefinition, pathology_id: int | None) -> Pathology:
         normalized = unicodedata.normalize("NFKC", definition.name).casefold()

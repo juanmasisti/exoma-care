@@ -31,6 +31,9 @@ beforeEach(()=>{
     let data
     if(config.url==='/patients/1')data=patient
     else if(config.url==='/patients/1/history')data=[]
+    else if(config.url==='/patients/1/familiogram/relationships')data=[{id:1,parentesco:'progenitor'}]
+    else if(config.url==='/patients/1/familiogram'&&config.method==='get')data=[]
+    else if(config.url==='/patients/1/familiogram'&&config.method==='post')data={id:1,patient_version:1,family_version:family.version,warnings:[],stale:false}
     else if(config.url==='/pathologies')data=pathologies
     else if(config.url==='/symptoms')data=terms
     else if(config.url==='/patients/1/family/history')data=family.version?[{version:family.version,changed_at:'2026-10-31T12:00:00',changed_by_name:'Médico Prueba',members:family.members}]:[]
@@ -51,11 +54,11 @@ async function render(){await act(async()=>{setSession(physician);root.render(Re
 async function openFamily(){await render();await click('Familiares')}
 async function addMember(){await click('Editar familiares');await click('Agregar familiar');await change(control('Nombre del familiar'),'María Prueba');await change(control('Parentesco'),'mother');await click('Incorporar a la lista')}
 
-test('familia opcional vacía se consulta solo al abrir su pestaña y PDF queda pendiente',async()=>{
+test('familia opcional vacía se consulta solo al abrir su pestaña y permite generar el PDF',async()=>{
   await render();assert.equal(requests.some(r=>r.url.includes('/family')),false)
   await click('Familiares')
   assert.match(container.textContent,/Todavía no hay familiares registrados/)
-  assert.match(container.textContent,/PDF.*pendiente|pendiente.*PDF/i)
+  assert.match(container.textContent,/Generar familiograma y PDF/)
   assert.equal(container.querySelector('a[download]'),null)
 })
 
@@ -116,4 +119,36 @@ test('después de comparar se puede conservar el borrador y guardar sobre versi�
   assert.equal(updates.length,2)
   assert.equal(updates[1].body.version,2)
   assert.equal(updates[1].body.members[0].full_name,'María Prueba')
+})
+
+test('familiograma envía versiones guardadas y deshabilita generación durante edición',async()=>{
+  await openFamily();await click('Generar familiograma y PDF')
+  const generated=requests.find(r=>r.method==='post'&&r.url.endsWith('/familiogram'))
+  assert.deepEqual(generated.body,{patient_version:1,family_version:0})
+  await click('Editar familiares')
+  const generate=[...container.querySelectorAll('button')].find(b=>b.textContent==='Generar familiograma y PDF')
+  assert.equal(generate.disabled,true)
+})
+
+test('nombres separados y parentesco detallado se guardan sin inferirlos',async()=>{
+  await openFamily();await click('Editar familiares');await click('Agregar familiar')
+  await change(control('Nombre del familiar'),'Nombre histórico')
+  await change(control('Parentesco'),'mother')
+  assert.equal(control('Nombres (obligatorio para generar)').value,'')
+  await change(control('Nombres (obligatorio para generar)'),'Marta');await change(control('Apellidos (obligatorio para generar)'),'Prueba')
+  await change(control('Parentesco del familiograma (obligatorio para generar)'),'1')
+  await change(control('Sexo para el símbolo y rama familiar'),'mujer')
+  await click('Incorporar a la lista');await click('Guardar información familiar')
+  const saved=requests.find(r=>r.method==='put').body.members[0]
+  assert.equal(saved.full_name,'Nombre histórico');assert.equal(saved.first_name,'Marta');assert.equal(saved.last_name,'Prueba')
+  assert.equal(saved.provider_relationship,1);assert.equal(saved.sex,'mujer')
+})
+
+
+test('familiograma indica el familiar incompleto antes de generar',async()=>{
+  family={...family,version:1,members:[{full_name:'Familiar incompleto',relationship:'father',relationship_detail:'',symptom_ids:[],diagnosis_status:'none',diagnosis_ids:[],notes:'',symptoms:[],diagnoses:[]}]}
+  await openFamily()
+  const generate=[...container.querySelectorAll('button')].find(b=>b.textContent==='Generar familiograma y PDF')
+  assert.equal(generate.disabled,true)
+  assert.match(container.textContent,/Antes de generar.*Familiar incompleto/)
 })

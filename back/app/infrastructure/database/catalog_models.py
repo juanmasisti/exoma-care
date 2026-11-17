@@ -25,6 +25,11 @@ class SymptomModel(Base):
 
 class PathologyModel(Base):
     __tablename__ = "pathologies"
+    __table_args__ = (UniqueConstraint("apigen_code", "apigen_group", name="uq_pathology_apigen_identity"),)
+
+    apigen_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    apigen_group: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cdss_code: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160))

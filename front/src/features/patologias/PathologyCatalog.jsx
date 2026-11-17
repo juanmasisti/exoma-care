@@ -5,6 +5,7 @@ import { errorMessage } from '../../services/api.js'
 import { listPathologies, savePathology } from './api.js'
 import SymptomPicker from './SymptomPicker.jsx'
 import SuspicionChecker from './SuspicionChecker.jsx'
+import ExternalPathologyPanel from './ExternalPathologyPanel.jsx'
 import './catalog.css'
 
 const emptyForm = () => ({ name: '', cardinal: [], secondary: [] })
@@ -112,6 +113,7 @@ export default function PathologyCatalog({ session }) {
           <h3 className="catalog-secondary-heading">Síntomas secundarios <span className="catalog-count">{selected.secondary_symptoms.length}</span></h3>
           {selected.secondary_symptoms.length ? <ul className="catalog-criteria-list">{selected.secondary_symptoms.map((term) => <li key={term.id}><span className="catalog-criteria-dot" aria-hidden="true" /><span><strong>{term.label}</strong><small>{term.code_system}: {term.code}</small></span></li>)}</ul> : <p className="catalog-muted">No tiene secundarios configurados.</p>}
         </section> : <section className="catalog-card catalog-welcome"><span className="catalog-welcome-icon"><FileSearch size={36} aria-hidden="true" /></span><span className="catalog-eyebrow">CONSULTA DEL CATÁLOGO</span><h2>Comenzá seleccionando una patología</h2><p>Revisá su síntoma cardinal y sus síntomas secundarios. Después podés comprobar la coherencia de una sospecha clínica.</p><span className="catalog-welcome-hint"><ArrowRight size={15} aria-hidden="true" />Elegí una patología del listado</span></section>}
+        {canEdit && <ExternalPathologyPanel disabled={busy} key={selected?.id ?? "new"} pathology={selected} onCriteriaDraft={(cardinal, secondary) => setForm((form) => ({ ...form, cardinal: [cardinal], secondary }))} onLinked={(saved) => { setSelected(saved); setItems((items) => items.map((item) => item.id === saved.id ? saved : item)) }} />}
         {selected && <SuspicionChecker key={checkerKey} pathology={selected} />}
       </div>
     </div>}

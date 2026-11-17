@@ -42,7 +42,7 @@ def legacy_database(tmp_path, monkeypatch):
 
 
 def original_rows(connection):
-    return {name:connection.execute(text(f"SELECT * FROM {name}")).all() for name in
+    return {name:connection.execute(text(f"SELECT {', '.join(c['name'] for c in inspect(connection).get_columns(name) if c['name'] != 'diagram_details')} FROM {name}")).all() for name in
         ("users","patients","patient_clinical_revisions","patient_family_records","family_members","patient_family_revisions")}
 
 

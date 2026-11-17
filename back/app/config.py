@@ -42,6 +42,12 @@ class Settings(BaseSettings):
             "API_SECRET_KEY_API_NOTIFICATIONS",
         ),
     )
+    snomed_url: str = ''
+    snomed_api_key: SecretStr = SecretStr('')
+    snomed_region: str = 'us-east-1'
+    familiogram_base_url: str = ''
+    familiogram_api_key: SecretStr = SecretStr('')
+    apigen_group_id: str = 'grupo6'
     chatbot_url: str = ''
     chatbot_apikey: SecretStr = SecretStr('')
     chatbot_token: SecretStr = SecretStr('')

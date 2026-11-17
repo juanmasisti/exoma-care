@@ -25,6 +25,9 @@ class PathologyResponse(BaseModel):
     name: str
     cardinal_symptom: SymptomResponse
     secondary_symptoms: list[SymptomResponse]
+    apigen_code: str | None = None
+    apigen_group: str | None = None
+    cdss_code: str | None = None
 
 
 class PathologyRequest(BaseModel):
