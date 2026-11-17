@@ -50,7 +50,8 @@ Fecha: 13/11/2026. Área de logística (Ivo).
   `requiere_remuestreo`.
 - **Aviso a paciente y médico**: `ResampleNotifier` con una implementación PROVISORIA que solo
   escribe en el log (`LoggingResampleNotifier`). Se llama después del commit; si falla, se
-  registra el error y no se deshace lo guardado.
+  registra el error y no se deshace lo guardado. (Reemplazado en T03c por
+  `EmailResampleNotifier`, ver la [decisión 014](014-aviso-remuestreo.md).)
 - `solicitar_remuestreo` recibe `now` además de `(study_id, motivo)` para poder fijar la hora
   en las pruebas, y `actor_id` opcional para el historial.
 - Lectura PROVISORIA de `studies.status` en el repositorio de muestras, hasta que estudios la
@@ -65,8 +66,8 @@ Fecha: 13/11/2026. Área de logística (Ivo).
 - **JSON malformado sin secreto**: FastAPI lee el cuerpo antes de chequear el secreto, así que
   un JSON roto sin secreto responde 422 y no 401 (comprobado). Un JSON válido sin secreto sí
   da 401. Se deja así.
-- Servicio de avisos de Camila (EC-20): reemplazar `LoggingResampleNotifier` por `notificar`.
-  Quién es el médico y cuál es el mail los resuelve ese servicio.
+- ~~Servicio de avisos de Camila (EC-20)~~: hecho en T03c, ver la
+  [decisión 014](014-aviso-remuestreo.md).
 - Código del estudio (decisión abierta 4) y lectura de `studies`: provisorios hasta que
   estudios (Tomás) los ofrezca. Cambio de estado condicional, para no depender de SQLite.
 - Pantalla de seguimiento del paciente (paso 5) con acceso a sacar turno nuevo: T03b.

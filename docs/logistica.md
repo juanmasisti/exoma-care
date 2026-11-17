@@ -247,7 +247,7 @@ Qué hace, todo en una transacción:
 3. Se crea la muestra vinculada al turno y al aviso:
    - 2 ml o más: `ready_for_pickup` y vigente; el estudio pasa a `listo_para_retirar`.
    - Menos de 2 ml: nace `discarded`, no vigente; el estudio pasa a `requiere_remuestreo` y se
-     avisa a paciente y médico (PROVISORIO: hoy solo queda en el log).
+     avisa por mail a paciente y médico (ver T03c).
 
 Respuesta: 201 con `{"sample_id": 1, "sample_status": "ready_for_pickup", "study_status": "listo_para_retirar"}`.
 Aviso repetido: 200 con el resultado de la primera vez.
@@ -349,3 +349,36 @@ Para probarlo en el navegador: reservar un turno, mandar el aviso con el simulad
 Pruebas: `back/tests/test_extraction_api.py`, `front/tests/turnos-seguimiento.test.mjs` y
 `front/tests/turnos-mis-turnos.test.mjs`.
 Detalles en la [decisión 013](decisiones/013-seguimiento-paciente.md).
+
+## Aviso de remuestreo por mail (T03c)
+
+Cuando el estudio pasa a `requiere_remuestreo` (aviso con menos de 2 ml o
+`solicitar_remuestreo`), después de confirmar los cambios se manda un mail con el servicio de
+avisos de Camila (`EnviarNotificacionUseCase`, que también lo registra en `notification_logs`).
+No hay endpoint nuevo.
+
+- **Destinatarios**: `SQLAlchemyStudyRepository.notification_recipients`: el paciente (mail
+  de su cuenta o, si no tiene, el de la ficha) y el médico que lo cargó, si hay y si su mail es
+  distinto del del paciente. Sin mail del
+  paciente no se manda y queda un warning en el log.
+- **Asunto**: `Hay que repetir la extracción del estudio EST-000001`.
+- **Mensaje**: el código del estudio, el motivo y que hay que sacar un turno nuevo desde el
+  seguimiento, sin volver a pagar. Sin nombre, DNI ni otros datos del paciente.
+- **`Idempotency-Key`**: `remuestreo-{study_id}-{sample_id}`; `referencia`: el id del estudio.
+- **Si falla** (servicio caído o que rechace el pedido, o `NOTIFICATIONS_API_KEY` sin
+  configurar), lo guardado no se deshace, el webhook responde igual 201 y el error queda en el
+  log (`No se pudo avisar el remuestreo del estudio N.`). No se reintenta solo. Un rebote del
+  mail llega después y no pasa por acá.
+
+Para probar el envío real: `NOTIFICATIONS_API_KEY` (y, si cambia, `NOTIFICATIONS_BASE_URL`) en
+`back/.env`, un paciente con un mail propio y un estudio con turno reservado. Con el back
+levantado, como en [Simulación del bot](#simulación-del-bot), desde `back`, el simulador con
+menos de 2 ml (si avisos tarda, el simulador puede cortar a los 5 s aunque el back responda
+201: el resultado se ve en el log del back o en el seguimiento):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.simular_aviso_extraccion EST-000001 1.9
+```
+
+Pruebas: `back/tests/test_extraction_api.py` (con un doble del caso de uso: ninguna sale a
+internet). Detalles en la [decisión 014](decisiones/014-aviso-remuestreo.md).
