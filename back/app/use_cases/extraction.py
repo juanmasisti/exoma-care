@@ -92,7 +92,7 @@ class ExtractionService:
             self.samples.rollback()
             raise
         if status is SampleStatus.DISCARDED:
-            self._notify(study_id, f"Volumen insuficiente: {volume_ml} ml (mínimo {MIN_SAMPLE_VOLUME_ML} ml).")
+            self._notify(study_id, sample_id, f"Volumen insuficiente: {volume_ml} ml (mínimo {MIN_SAMPLE_VOLUME_ML} ml).")
         return self._result(sample_id, status), True
 
     def solicitar_remuestreo(self, study_id: int, motivo: str, now: datetime, actor_id: int | None = None) -> None:
@@ -115,7 +115,7 @@ class ExtractionService:
         except Exception:
             self.samples.rollback()
             raise
-        self._notify(study_id, motivo)
+        self._notify(study_id, sample["id"], motivo)
 
     def seguimiento(self, user_id: int, study_id: int) -> dict:
         status = self.appointments.study_status_for_user(study_id, user_id)
@@ -157,9 +157,9 @@ class ExtractionService:
         return {"sample_id": sample_id, "sample_status": status.value,
                 "study_status": STUDY_STATUS_FOR_NEW_SAMPLE[status]}
 
-    def _notify(self, study_id: int, motivo: str) -> None:
+    def _notify(self, study_id: int, sample_id: int, motivo: str) -> None:
         # Lo guardado ya está confirmado: un aviso fallido no lo deshace ni hace fallar el pedido.
         try:
-            self.notifier.avisar_remuestreo(study_id, motivo)
+            self.notifier.avisar_remuestreo(study_id, sample_id, motivo)
         except Exception:
             logger.exception("No se pudo avisar el remuestreo del estudio %s.", study_id)
