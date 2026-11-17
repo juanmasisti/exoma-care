@@ -9,12 +9,12 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.catalog_dependencies import require_roles
-from app.api.dependencies import get_database_session
+from app.api.dependencies import get_database_session, get_enviar_notificacion_use_case, get_notification_service
 from app.api.routes.extraction_centers import get_clock
 from app.config import get_settings
 from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
-from app.infrastructure.logging_resample_notifier import LoggingResampleNotifier
+from app.infrastructure.email_resample_notifier import EmailResampleNotifier
 from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
@@ -25,8 +25,11 @@ router = APIRouter(prefix="/api", tags=["extracción"])
 patient = require_roles(UserRole.PATIENT)
 
 
-def get_resample_notifier():
-    return LoggingResampleNotifier()
+def get_resample_notifier(session: Session = Depends(get_database_session)):
+    # Sin Depends del caso de uso de avisos: sin NOTIFICATIONS_API_KEY tiraría al resolver dependencias
+    # y daría 500 en el webhook y el seguimiento. Así el error cae en el aviso, que solo lo loguea.
+    return EmailResampleNotifier(SQLAlchemyStudyRepository(session),
+                                 lambda: get_enviar_notificacion_use_case(session, get_notification_service()))
 
 
 def get_service(session: Session = Depends(get_database_session), notifier=Depends(get_resample_notifier)):

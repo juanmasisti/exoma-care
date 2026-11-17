@@ -7,13 +7,16 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.routes import extraction as extraction_routes
 from app.api.routes.extraction import get_resample_notifier
 from app.domain.entities.logistics import TIMEZONE
 from app.domain.entities.study import BIOINFORMATICS_STATUSES
 from app.infrastructure.database.logistics_models import (
     AppointmentModel, ExtractionNoticeModel, SampleEventModel, SampleModel,
 )
+from app.infrastructure.database.models import Paciente
 from app.infrastructure.database.study_models import StudyModel
+from app.infrastructure.email_resample_notifier import EmailResampleNotifier
 from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
@@ -38,8 +41,8 @@ class RecordingNotifier:
     def __init__(self):
         self.calls = []
 
-    def avisar_remuestreo(self, study_id, motivo):
-        self.calls.append((study_id, motivo))
+    def avisar_remuestreo(self, study_id, sample_id, motivo):
+        self.calls.append((study_id, sample_id, motivo))
 
 
 @pytest.fixture
@@ -102,7 +105,7 @@ def test_1_9_ml_is_born_discarded_and_requires_resample(extraction):
     [event] = rows(engine, SampleEventModel)
     assert (event.from_status, event.to_status) == (None, "discarded")  # nace descartada, no es una transición
     assert study_status(engine, PAID) == "requiere_remuestreo"
-    assert notifier.calls == [(PAID, "Volumen insuficiente: 1.9 ml (mínimo 2 ml).")]
+    assert notifier.calls == [(PAID, sample.id, "Volumen insuficiente: 1.9 ml (mínimo 2 ml).")]
 
 
 def test_repeated_notice_returns_the_same_result_without_duplicating(extraction, caplog):
@@ -159,7 +162,7 @@ def test_notifier_failure_does_not_undo_the_notice(extraction, caplog):
     http, engine, _ = extraction
 
     class FailingNotifier:
-        def avisar_remuestreo(self, study_id, motivo):
+        def avisar_remuestreo(self, study_id, sample_id, motivo):
             raise RuntimeError("avisos caído")
 
     app.dependency_overrides[get_resample_notifier] = FailingNotifier
@@ -253,7 +256,7 @@ def test_solicitar_remuestreo_discards_the_current_sample(extraction):
     assert (discard.from_status, discard.to_status, discard.reason, discard.actor_id) == (
         "ready_for_pickup", "discarded", "ADN insuficiente", ADMIN)
     assert study_status(engine, PAID) == "requiere_remuestreo"
-    assert notifier.calls == [(PAID, "ADN insuficiente")]
+    assert notifier.calls == [(PAID, sample.id, "ADN insuficiente")]
     # El estudio queda habilitado para sacar un turno nuevo.
     assert book(http, starts_at="2026-11-04T10:00:00-03:00").status_code == 201
 
@@ -275,6 +278,94 @@ def test_solicitar_remuestreo_rules(extraction):
             service(session, notifier).solicitar_remuestreo(PAID, "ADN insuficiente", LATER)
     assert study_status(engine, PAID) == "listo_para_retirar"
     assert notifier.calls == []
+
+
+class RecordingAvisos:
+    """Doble de EnviarNotificacionUseCase (Camila): guarda lo que se mandaría, sin salir a internet."""
+
+    def __init__(self, error=None):
+        self.sent = []
+        self.error = error
+
+    async def execute(self, datos):
+        if self.error:
+            raise self.error
+        self.sent.append(datos)
+
+
+@pytest.fixture
+def email_avisos(extraction, monkeypatch):
+    """Usa el notifier real de la ruta, con el caso de uso de avisos reemplazado por el doble."""
+    avisos = RecordingAvisos()
+    monkeypatch.setattr(extraction_routes, "get_notification_service", lambda: None)
+    monkeypatch.setattr(extraction_routes, "get_enviar_notificacion_use_case", lambda session, service: avisos)
+    del app.dependency_overrides[get_resample_notifier]
+    return avisos
+
+
+def test_resample_email_goes_to_patient_and_physician(extraction, email_avisos):
+    http, engine, _ = extraction
+    with Session(engine) as session:
+        session.get(Paciente, 1).created_by_physician_id = DOCTOR
+        session.commit()
+    book(http)
+    assert notice(http, "1.9").status_code == 201
+    [sample] = rows(engine, SampleModel)
+    [datos] = email_avisos.sent
+    assert datos.destinatarios == ["demo1@example.test", "demo4@example.test"]
+    assert datos.idempotency_key == f"remuestreo-{PAID}-{sample.id}"
+    assert datos.referencia == str(PAID)
+    assert datos.asunto == "Hay que repetir la extracción del estudio EST-000001"
+    assert "EST-000001" in datos.mensaje
+    assert "Motivo: Volumen insuficiente: 1.9 ml (mínimo 2 ml)." in datos.mensaje
+    assert "sacar un turno nuevo" in datos.mensaje
+    assert "Sofía" not in datos.mensaje and "45000001" not in datos.mensaje
+
+
+def test_resample_email_from_bioinformatics_outside_the_threadpool(extraction):
+    http, engine, _ = extraction
+    book(http)
+    notice(http, "2.5")
+    avisos = RecordingAvisos()
+    with Session(engine) as session:
+        notifier = EmailResampleNotifier(SQLAlchemyStudyRepository(session), lambda: avisos)
+        service(session, notifier).solicitar_remuestreo(PAID, "ADN insuficiente", LATER)
+    [sample] = rows(engine, SampleModel)
+    [datos] = avisos.sent
+    assert datos.destinatarios == ["demo1@example.test"]  # sin médico: solo el paciente
+    assert datos.idempotency_key == f"remuestreo-{PAID}-{sample.id}"
+    assert "Motivo: ADN insuficiente" in datos.mensaje
+
+
+@pytest.mark.parametrize("break_avisos", ["send_fails", "missing_api_key"])
+def test_email_failure_does_not_break_the_webhook(extraction, monkeypatch, caplog, break_avisos):
+    http, engine, _ = extraction
+    del app.dependency_overrides[get_resample_notifier]
+    if break_avisos == "send_fails":
+        failing = RecordingAvisos(error=RuntimeError("avisos caído"))
+        monkeypatch.setattr(extraction_routes, "get_notification_service", lambda: None)
+        monkeypatch.setattr(extraction_routes, "get_enviar_notificacion_use_case", lambda session, service: failing)
+    else:
+        # Vacía y no ausente: así el .env local no la completa y el cliente real falla antes de salir a internet.
+        monkeypatch.setenv("NOTIFICATIONS_API_KEY", "")
+    book(http)
+    with caplog.at_level(logging.ERROR, logger="app.use_cases.extraction"):
+        assert notice(http, "1.9").status_code == 201
+    assert "No se pudo avisar el remuestreo del estudio 1." in caplog.text
+    assert study_status(engine, PAID) == "requiere_remuestreo"
+    assert http.get(f"/api/studies/{PAID}/tracking", headers=login(http)).status_code == 200
+
+
+def test_resample_email_without_patient_email_is_skipped(caplog):
+    class NoRecipients:
+        def notification_recipients(self, study_id):
+            return []
+
+    avisos = RecordingAvisos()
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.email_resample_notifier"):
+        EmailResampleNotifier(NoRecipients(), lambda: avisos).avisar_remuestreo(PAID, 7, "ADN insuficiente")
+    assert avisos.sent == []
+    assert "no tiene mail del paciente" in caplog.text
 
 
 def test_tracking_shows_the_samples_and_the_resample(extraction):
