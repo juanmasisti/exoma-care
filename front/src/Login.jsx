@@ -75,6 +75,7 @@ function Login() {
         : user.role === 'super_admin' ? '/super-admin/usuarios'
         : user.role === 'treating_physician' ? '/medico/pacientes'
           : user.role === 'medical_manager' ? '/catalogo/patologias'
+            : user.role === 'lab_administrator' ? '/estudios'
             : roleRoutes[user.rol?.toLowerCase()] ?? '/portal'
 
       navigate(destination)
