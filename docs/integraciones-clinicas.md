@@ -28,6 +28,22 @@ Completar `back/.env`, ignorado por Git. No usar variables `VITE_` para credenci
 
 Reiniciar el backend después de cambiar configuración. Las credenciales de estos servicios son independientes de las claves de la API de cupones.
 
+### Bases que probaron las integraciones antes de unir la rama con develop
+
+La numeración original de esta rama (`0014`/`0015`) coincidía con una migración distinta de develop. No cambiar manualmente `alembic_version` ni borrar la base. Antes de `alembic upgrade head`, inspeccionar desde `back`:
+
+```bash
+./.venv/Scripts/python.exe -m app.infrastructure.database.reconcile_clinical_revision
+```
+
+Si detecta una base clínica anterior al merge, detener el backend y ejecutar:
+
+```bash
+./.venv/Scripts/python.exe -m app.infrastructure.database.reconcile_clinical_revision --apply --backup "D:/Downloads/exoma-care-antes-integracion.db"
+```
+
+La ruta de respaldo debe ser nueva y estar fuera del repositorio. La herramienta valida el esquema original, respalda SQLite, agrega la migración de estudios que faltaba y registra la revisión equivalente. Conserva las tablas clínicas y sus datos. Si el esquema no coincide, se detiene. Una base procedente de develop no requiere esta conversión. Alembic bloquea la actualización directa de una base clínica antigua para impedir que se aplique una migración con significado equivocado.
+
 Con el backend detenido y un respaldo de la base, ejecutar desde `back` en Git Bash:
 
 ```bash
@@ -37,7 +53,7 @@ Con el backend detenido y un respaldo de la base, ejecutar desde `back` en Git B
 bash dev.sh
 ```
 
-La migración `0014` agrega identidad externa a patologías y restricciones de unicidad; `0015` agrega detalles familiares y documentos. No se borran patologías, familiares ni revisiones. La conversión a PDF utiliza `fpdf2`, ya incluido en dependencias.
+La migración `0014` corresponde a estudios y presupuestos de develop. `0015` agrega identidad externa a patologías y restricciones de unicidad; `0016` agrega detalles familiares y documentos. No se borran patologías, familiares ni revisiones. La conversión a PDF utiliza `fpdf2`, ya incluido en dependencias.
 
 En otra terminal, desde `front`:
 

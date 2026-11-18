@@ -19,6 +19,9 @@ export const BEFORE_APPOINTMENT = new Date('2026-11-04T09:00:00-03:00').getTime(
 export const patient = { access_token: 'test-token', role: 'patient', rol: 'Paciente' }
 export const doctor = { ...patient, role: 'treating_physician', rol: 'Médico' }
 export const manager = { ...patient, role: 'medical_manager', rol: 'Gerente' }
+export const labAdmin = { ...patient, role: 'lab_administrator', rol: 'Administrativo' }
+// Turno reservado como lo lista el simulador del bot (T03d).
+export const waitingStudy = { study_id: 7, code: 'EST-000007', patient_name: 'Paciente DEMO', center_name: 'Centro DEMO 1', starts_at: '2026-11-04T09:15:00-03:00' }
 const provinces = [{ id: 1, name: 'Provincia Demo', active_centers: 3 }, { id: 2, name: 'Provincia Vacía', active_centers: 0 }, { id: 3, name: 'Provincia Grande', active_centers: 14 }]
 const manyCenters = Array.from({ length: 14 }, (_, index) => ({ id: 101 + index, name: `Centro GRANDE ${index + 1}`, address: `Calle Demo ${index + 1}, Ciudad Demo`,
   city: 'Ciudad Demo', province_id: 3, latitude: -34.6 - index / 100, longitude: -58.4, phone: null })).sort((a, b) => (a.name < b.name ? -1 : 1))
@@ -30,6 +33,17 @@ const centers = [
   { id: 10, name: 'Centro DEMO 1', address: 'Calle Demo 100, Ciudad Demo', city: 'Ciudad Demo', province_id: 1, latitude: -34.6, longitude: -58.4, phone: null },
   { id: 11, name: 'Centro DEMO 2', address: 'Calle Demo 200, Ciudad Demo', city: 'Ciudad Demo', province_id: 1, latitude: -34.61, longitude: -58.41, phone: null },
 ]
+
+// Seguimiento del estudio 7 como lo devuelve el back; cada prueba cambia etapa, estado y muestras.
+export function tracking(stage='extraction', samples=[], status='turno_sacado') {
+  return { study_id: 7, code: 'EST-000007', status, stage, requires_new_extraction: stage==='resample', samples }
+}
+// Muestra descartada: nace descartada por volumen o, con `reason`, la descarta bioinformática después.
+export function discardedSample(reason=null) {
+  const born = { from_status: null, to_status: reason ? 'ready_for_pickup' : 'discarded', reason: null, at: '2026-11-04T09:20:00-03:00' }
+  const events = reason ? [born, { from_status: 'in_transit_to_korea', to_status: 'discarded', reason, at: '2026-11-20T11:00:00-03:00' }] : [born]
+  return { id: 1, volume_ml: reason ? '2.50' : '1.90', status: 'discarded', is_current: false, events }
+}
 
 function failure(config, status, statusText, detail) {
   return new AxiosError(`Request failed with status code ${status}`, 'ERR_BAD_REQUEST', config, null, { status, statusText, headers: {}, config, data: { detail } })
@@ -54,7 +68,8 @@ beforeEach(() => {
   container=document.createElement('div');document.body.append(container);root=createRoot(container)
   calls=[]
   Object.assign(fake,{networkDown:false,slowDay:null,taken:new Set(),slotTaken:false,studyTaken:false,booked:false,cancelRejected:false,documentRejected:false,
-    eligible:[{id:7,code:'EST-000007',status:'pagado'}],myAppointments:[]})
+    eligible:[{id:7,code:'EST-000007',status:'pagado'}],myAppointments:[],myTrackings:[],myTrackingsDown:false,tracking:tracking(),
+    demoEnabled:true,waiting:[waitingStudy],simulateRejected:false})
   mock.timers.enable({apis:['Date'],now:WEDNESDAY_10})
   api.defaults.adapter=async (config) => {
     calls.push({url:config.url,method:config.method,params:config.params,data:config.data&&JSON.parse(config.data),responseType:config.responseType,authorization:config.headers?.Authorization})
@@ -94,10 +109,25 @@ beforeEach(() => {
       data=new Blob(['%PDF-DEMO'],{type:'application/pdf'})
     }
     else if(config.url==='/appointments/mine') data=fake.myAppointments
+    else if(config.url==='/studies/tracking/mine') {
+      if(fake.myTrackingsDown) throw failure(config,500,'Internal Server Error','No se pudo cargar el seguimiento.')
+      data=fake.myTrackings
+    }
+    else if(config.url==='/studies/7/tracking') data=fake.tracking
     else if(config.url==='/studies/999/appointment') throw failure(config,404,'Not Found','El estudio no existe o no es tuyo.')
     // Como el back: un estudio con turno vigente deja de ser elegible.
     else if(config.url==='/appointments/eligible-studies') data=fake.eligible.filter((study)=>!(fake.booked&&study.id===7))
     else if(config.url==='/extraction-centers') data=[...centers,...manyCenters].filter((c)=>c.province_id===Number(config.params.province_id))
+    // Simulador del bot (T03d): apagado, el back responde 404 como a una ruta que no existe.
+    else if(config.url.startsWith('/demo/')&&!fake.demoEnabled) throw failure(config,404,'Not Found','Not Found')
+    else if(config.url==='/demo/extraction-notice/studies') data=fake.waiting
+    else if(config.url==='/demo/extraction-notice'&&config.method==='post') {
+      if(fake.simulateRejected) throw failure(config,409,'Conflict','El estudio no está esperando una extracción.')
+      const ready=Number(JSON.parse(config.data).volume_ml)>=2
+      fake.waiting=[]  // como el back: el turno queda asistido y sale de la lista
+      return {data:{sample_id:1,sample_status:ready?'ready_for_pickup':'discarded',study_status:ready?'listo_para_retirar':'requiere_remuestreo'},
+        status:201,statusText:'Created',headers:{},config}
+    }
     else if(config.url==='/patients') data={items:[],total:0,offset:0,limit:20}
     else if(['/pathologies','/symptoms'].includes(config.url)) data=[]
     else throw new Error(`Petición inesperada ${config.method} ${config.url}`)

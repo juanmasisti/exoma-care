@@ -52,7 +52,7 @@ def error(exc):
 @router.get("/apigen/pathologies", dependencies=[Depends(read)])
 async def genetic_catalog(apigen=Depends(get_apigen_client)):
     try:
-        return await apigen.listar_patologias(get_settings().apigen_group_id)
+        return await apigen.listar_patologias_grupo(get_settings().apigen_group_id)
     except ExternalServiceError as exc:
         error(exc)
 
@@ -66,7 +66,7 @@ async def clinical_catalog(cdss=Depends(get_cdss_client)):
 @router.get("/apigen/genes", dependencies=[Depends(write)])
 async def genes(q: str = Query(min_length=2, max_length=50, pattern=r"^[A-Za-z0-9.-]+$"), apigen=Depends(get_apigen_client)):
     try:
-        return await apigen.buscar_genes(q)
+        return await apigen.buscar_genes_clinicos(q)
     except ExternalServiceError as exc:
         error(exc)
 
@@ -74,7 +74,7 @@ async def genes(q: str = Query(min_length=2, max_length=50, pattern=r"^[A-Za-z0-
 async def create_genetic_pathology(body: GeneticRequest, apigen=Depends(get_apigen_client)):
     # This action writes only to Apigen. Linking local criteria is a separate recoverable step.
     try:
-        existing = await apigen.listar_patologias(get_settings().apigen_group_id)
+        existing = await apigen.listar_patologias_grupo(get_settings().apigen_group_id)
         if any(item["codigo"] == body.codigo for item in existing):
             raise HTTPException(409, "Ese código ya existe. Actualizá el catálogo y asociá la identidad existente; no se sobrescribió.")
         result = await apigen.alta_patologia(get_settings().apigen_group_id, body.codigo, body.nombre, list(dict.fromkeys(body.genes)), body.herencia)

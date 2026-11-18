@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     familiogram_base_url: str = ''
     familiogram_api_key: SecretStr = SecretStr('')
     apigen_group_id: str = 'grupo6'
+    # Cupones (otro grupo). Un único gerente por grupo: el primer POST fija su id, así que
+    # CUPONES_GERENTE_ID debe ser una constante estable antes de la primera llamada real.
+    cupones_base_url: str = "https://vekuhonbpqtzakqbcoph.supabase.co/functions/v1/cupones-api"
+    cupones_api_key: SecretStr | None = None
+    cupones_gerente_id: str = "G-GRUPO6"
+    # Obras sociales (Grupo 9).
+    obras_sociales_base_url: str = "https://bxsvmfesrtjrqubblgws.supabase.co/functions/v1/api"
+    obras_sociales_api_key: SecretStr | None = None
     chatbot_url: str = ''
     chatbot_apikey: SecretStr = SecretStr('')
     chatbot_token: SecretStr = SecretStr('')
@@ -74,6 +82,8 @@ class Settings(BaseSettings):
     fedex_pass: SecretStr | None = None
     # Secreto compartido con el bot de extracción (header X-Webhook-Secret). Sin valor, el webhook rechaza todo.
     extraction_webhook_secret: SecretStr | None = None
+    # Herramientas de demo (simulador del bot en la app). Apagadas: sus endpoints dan 404.
+    demo_tools_enabled: bool = False
 
     @field_validator("extraction_webhook_secret", mode="before")
     @classmethod
@@ -137,3 +147,29 @@ def get_notification_api_key() -> str:
 
 def get_notifications_base_url() -> str:
     return get_settings().notifications_base_url.rstrip("/")
+
+
+def get_cupones_api_key() -> str:
+    key = get_settings().cupones_api_key
+    if key is None:
+        raise RuntimeError("Configura CUPONES_API_KEY en back/.env o en el entorno.")
+    return key.get_secret_value()
+
+
+def get_cupones_base_url() -> str:
+    return get_settings().cupones_base_url.rstrip("/")
+
+
+def get_cupones_gerente_id() -> str:
+    return get_settings().cupones_gerente_id.strip()
+
+
+def get_obras_sociales_api_key() -> str:
+    key = get_settings().obras_sociales_api_key
+    if key is None:
+        raise RuntimeError("Configura OBRAS_SOCIALES_API_KEY en back/.env o en el entorno.")
+    return key.get_secret_value()
+
+
+def get_obras_sociales_base_url() -> str:
+    return get_settings().obras_sociales_base_url.rstrip("/")

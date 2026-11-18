@@ -1,6 +1,7 @@
-import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, History, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, Stethoscope, UserCog, Users } from 'lucide-react'
+import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, FileText, FlaskConical, History, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, Stethoscope, Ticket, UserCog, Users } from 'lucide-react'
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom'
 import { setSession } from '../../services/session.js'
+import { useSimulatorEnabled } from '../../features/logistica/simulador/api.js'
 import './ClinicalLayout.css'
 
 export default function ClinicalLayout({ session, children, pageLabel, bioinformaticsCounts = {} }) {
@@ -8,12 +9,18 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   const manager = session.role === 'medical_manager'
   const bioinformatician = session.role === 'bioinformatician'
   const superAdmin = session.role === 'super_admin'
-  const roleLabel = patient ? 'Paciente' : manager ? 'Gerente médico' : bioinformatician ? 'Bioinformático' : superAdmin ? 'Super Admin' : 'Médico tratante'
+  const labAdmin = session.role === 'lab_administrator'
+  const physician = !patient && !manager && !bioinformatician && !superAdmin && !labAdmin
+  const roleLabel = patient ? 'Paciente' : manager ? 'Gerente médico' : bioinformatician ? 'Bioinformático' : superAdmin ? 'Super Admin' : labAdmin ? 'Administrativo' : 'Médico tratante'
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const bioSection = searchParams.get('section') || 'inicio'
   const patientsArea = location.pathname.startsWith('/medico/pacientes')
   const chatArea = location.pathname.startsWith('/paciente/consultas')
+  const studiesArea = location.pathname.startsWith('/estudios')
+  const couponsArea = location.pathname.startsWith('/cupones')
+  const simulatorArea = location.pathname === '/administrativo/simulador-bot'
+  const simulatorEnabled = useSimulatorEnabled(labAdmin, session.access_token)
   const myAppointmentsArea = location.pathname === '/paciente/turnos' || location.pathname.startsWith('/paciente/estudios/')
   const bioSectionLabels = {
     inicio: 'Inicio / Dashboard',
@@ -21,9 +28,9 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
     analisis: 'En análisis',
     historial: 'Historial',
   }
-  const viewLabel = superAdmin ? 'Administración de usuarios' : patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
-  const home = superAdmin ? '/super-admin/usuarios' : patient ? '/paciente/turnos/reservar' : bioinformatician ? '/bioinformatica/dashboard' : manager ? '/catalogo/patologias' : '/medico/pacientes'
-  const viewPath = superAdmin
+  const viewLabel = simulatorArea ? 'Simular aviso del bot' : studiesArea ? (patient ? 'Mis estudios' : 'Solicitudes de estudio') : couponsArea ? (patient ? 'Mis cupones' : 'Cupones') : superAdmin ? 'Administración de usuarios' : patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
+  const home = superAdmin ? '/super-admin/usuarios' : patient ? '/paciente/turnos/reservar' : bioinformatician ? '/bioinformatica/dashboard' : manager ? '/catalogo/patologias' : labAdmin ? '/estudios' : '/medico/pacientes'
+  const viewPath = simulatorArea ? '/administrativo/simulador-bot' : studiesArea ? '/estudios' : couponsArea ? '/cupones' : superAdmin
     ? home
     : patient
       ? (chatArea ? '/paciente/consultas' : myAppointmentsArea ? '/paciente/turnos' : home)
@@ -42,9 +49,15 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
       </Link>
       <div className="clinical-role"><span>Rol activo</span><strong><i aria-hidden="true" />{roleLabel}</strong></div>
       <nav className="clinical-navigation" aria-label="Navegación clínica">
-        <p>{superAdmin ? 'ADMINISTRACIÓN' : patient ? 'PORTAL DEL PACIENTE' : bioinformatician ? 'ANÁLISIS GENÓMICO' : manager ? 'GESTIÓN MÉDICA' : 'CONSULTA CLÍNICA'}</p>
+        <p>{superAdmin ? 'ADMINISTRACIÓN' : patient ? 'PORTAL DEL PACIENTE' : bioinformatician ? 'ANÁLISIS GENÓMICO' : manager ? 'GESTIÓN MÉDICA' : labAdmin ? 'GESTIÓN ADMINISTRATIVA' : 'CONSULTA CLÍNICA'}</p>
         {superAdmin && <NavLink to={home} className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <UserCog size={19} aria-hidden="true" /><span><strong>Usuarios y roles</strong><small>Altas de personal</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {(patient || labAdmin || superAdmin) && <NavLink to="/estudios" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <FileText size={19} aria-hidden="true" /><span><strong>{patient ? 'Mis estudios' : 'Solicitudes de estudio'}</strong><small>{patient ? 'Presupuesto y pagos' : 'Presupuestos y coberturas'}</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {labAdmin && simulatorEnabled && <NavLink to="/administrativo/simulador-bot" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <FlaskConical size={19} aria-hidden="true" /><span><strong>Simular aviso del bot</strong><small>SIMULACIÓN para demo</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
         {patient && <NavLink to="/paciente/consultas" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <MessageCircle size={19} aria-hidden="true" /><span><strong>Consultas</strong><small>Estudios genéticos y patologías</small></span><ChevronRight size={15} aria-hidden="true" />
@@ -74,17 +87,23 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
             </Link>
           ))}
         </>}
-        {!manager && !patient && !bioinformatician && !superAdmin && <NavLink to="/medico/pacientes" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+        {physician && <NavLink to="/estudios" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <FileText size={19} aria-hidden="true" /><span><strong>Solicitudes de estudio</strong><small>Pedidos y presupuestos</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {(physician || manager || patient || superAdmin) && <NavLink to="/cupones" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <Ticket size={19} aria-hidden="true" /><span><strong>{patient ? 'Mis cupones' : 'Cupones'}</strong><small>Descuentos en estudios</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {physician && <NavLink to="/medico/pacientes" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <Users size={19} aria-hidden="true" /><span><strong>Pacientes</strong><small>Gestión clínica y altas</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
-        {!patient && !bioinformatician && !superAdmin && <NavLink to="/catalogo/patologias" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+        {!patient && !bioinformatician && !superAdmin && !labAdmin && <NavLink to="/catalogo/patologias" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           {manager ? <BookOpen size={19} aria-hidden="true" /> : <Stethoscope size={19} aria-hidden="true" />}
           <span><strong>{manager ? 'Catálogo de patologías' : 'Validación clínica'}</strong><small>Patologías y criterios</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
       </nav>
       <div className="clinical-sidebar-footer">
-        <div className="clinical-profile">        <span className="clinical-avatar" aria-hidden="true">{patient ? 'PA' : manager ? 'GM' : bioinformatician ? 'BI' : superAdmin ? 'SA' : 'MT'}</span>
-        <span><strong>{roleLabel}</strong><small>{patient ? 'Portal del paciente' : manager ? 'Administración del catálogo' : bioinformatician ? 'Análisis genómico' : superAdmin ? 'Gestión de usuarios' : 'Gestión clínica'}</small></span>
+        <div className="clinical-profile">        <span className="clinical-avatar" aria-hidden="true">{patient ? 'PA' : manager ? 'GM' : bioinformatician ? 'BI' : superAdmin ? 'SA' : labAdmin ? 'AD' : 'MT'}</span>
+        <span><strong>{roleLabel}</strong><small>{patient ? 'Portal del paciente' : manager ? 'Administración del catálogo' : bioinformatician ? 'Análisis genómico' : superAdmin ? 'Gestión de usuarios' : labAdmin ? 'Gestión administrativa' : 'Gestión clínica'}</small></span>
         </div>
         <p><ShieldCheck size={14} aria-hidden="true" />Acceso según tu perfil</p>
       </div>

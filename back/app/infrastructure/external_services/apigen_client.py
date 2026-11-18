@@ -31,7 +31,7 @@ class ApigenClient:
         self._transport = transport
         self._list_cache = list_cache if list_cache is not None else apigen_list_cache
 
-    async def listar_patologias(self, grupo_id: str) -> list[dict[str, Any]]:
+    async def listar_patologias_grupo(self, grupo_id: str) -> list[dict[str, Any]]:
         from pydantic import TypeAdapter, ValidationError
         from app.infrastructure.external_services.clinical_contracts import GeneticPathology
         payload = await self._clinical_request("POST", "/rpc/listar_patologias", json={"p_grupo_id": grupo_id})
@@ -40,7 +40,7 @@ class ApigenClient:
         except ValidationError as exc:
             raise ExternalServiceError("Apigen", "Apigen devolvió un catálogo inválido.", 502) from exc
 
-    async def buscar_genes(self, query: str) -> list[str]:
+    async def buscar_genes_clinicos(self, query: str) -> list[str]:
         payload = await self._clinical_request("GET", "/gen", params={"simbolo": f"ilike.{query}*", "select": "simbolo", "limit": "20"})
         if not isinstance(payload, list) or any(not isinstance(item, dict) or not isinstance(item.get("simbolo"), str) for item in payload):
             raise ExternalServiceError("Apigen", "Apigen devolvió genes inválidos.", 502)
@@ -154,6 +154,72 @@ class ApigenClient:
                 "p_excluir_patologias": excluir_patologias,
             },
         )
+
+    async def listar_patologias(self) -> list[dict[str, Any]]:
+        payload = await self._request("POST", "/rpc/listar_patologias", json={})
+        if not isinstance(payload, list) or not all(
+            isinstance(item, dict)
+            and isinstance(item.get("codigo"), str)
+            and isinstance(item.get("genes"), list)
+            for item in payload
+        ):
+            raise ExternalServiceError(
+                "Apigen", "Apigen devolvió una lista de patologías inválida.", 502
+            )
+        return payload
+
+    async def genes_por_patologia(self, codigo: str) -> list[str]:
+        payload = await self._request(
+            "POST", "/rpc/genes_por_patologia", json={"p_patologia": codigo}
+        )
+        if not isinstance(payload, list) or not all(
+            isinstance(gene, str) and gene.strip() for gene in payload
+        ):
+            raise ExternalServiceError(
+                "Apigen", "Apigen devolvió una lista de genes inválida.", 502
+            )
+        return payload
+
+    async def genes_hallazgos_secundarios(self) -> list[dict[str, Any]]:
+        payload = await self._request(
+            "GET",
+            "/genes_hallazgos_secundarios",
+            params={"select": "gen,condicion,herencia"},
+        )
+        if not isinstance(payload, list) or not all(
+            isinstance(item, dict) and isinstance(item.get("gen"), str)
+            for item in payload
+        ):
+            raise ExternalServiceError(
+                "Apigen",
+                "Apigen devolvió una lista de genes de hallazgos inválida.",
+                502,
+            )
+        return payload
+
+    async def buscar_genes(self, prefijo: str, limit: int = 20) -> list[str]:
+        prefix = prefijo.strip()
+        if not prefix or not all(char.isalnum() or char == "-" for char in prefix):
+            raise ValueError(
+                "El prefijo del gen solo admite letras, números y guiones."
+            )
+        payload = await self._request(
+            "GET",
+            "/gen",
+            params={
+                "simbolo": f"ilike.{prefix}*",
+                "select": "simbolo",
+                "limit": str(limit),
+            },
+        )
+        if not isinstance(payload, list) or not all(
+            isinstance(item, dict) and isinstance(item.get("simbolo"), str)
+            for item in payload
+        ):
+            raise ExternalServiceError(
+                "Apigen", "Apigen devolvió una lista de genes inválida.", 502
+            )
+        return [item["simbolo"] for item in payload]
 
     async def _request(
         self,

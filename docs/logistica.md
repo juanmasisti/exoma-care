@@ -96,8 +96,9 @@ Desde `back`:
 
 ```bash
 ./.venv/Scripts/python.exe -m alembic upgrade head
-# Debe informar 0007. Carga opcional de provincias, 100 centros DEMO y feriados fijos:
-./.venv/Scripts/python.exe -m app.infrastructure.database.seed_demo_extraction_centers
+# Debe quedar en la cabeza que informa `alembic heads`. Carga opcional de provincias,
+# 100 centros DEMO y feriados fijos (también migra antes de cargar):
+./.venv/Scripts/python.exe -m seeders logistics
 bash dev.sh
 ```
 
@@ -246,7 +247,7 @@ Qué hace, todo en una transacción:
 3. Se crea la muestra vinculada al turno y al aviso:
    - 2 ml o más: `ready_for_pickup` y vigente; el estudio pasa a `listo_para_retirar`.
    - Menos de 2 ml: nace `discarded`, no vigente; el estudio pasa a `requiere_remuestreo` y se
-     avisa a paciente y médico (PROVISORIO: hoy solo queda en el log).
+     avisa por mail a paciente y médico (ver T03c).
 
 Respuesta: 201 con `{"sample_id": 1, "sample_status": "ready_for_pickup", "study_status": "listo_para_retirar"}`.
 Aviso repetido: 200 con el resultado de la primera vez.
@@ -289,10 +290,143 @@ hace el mismo POST que haría el bot real, con un `external_id` nuevo y la hora 
 camino feliz. Con el back levantado y `EXTRACTION_WEBHOOK_SECRET` en `back/.env`, desde `back`:
 
 ```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head   # 0008
+.\.venv\Scripts\python.exe -m alembic upgrade head   # incluye la 0008 (muestras)
 .\.venv\Scripts\python.exe -m scripts.simular_aviso_extraccion EST-000001 2.5
 ```
 
 Pruebas: `back/tests/test_extraction_api.py`, `back/tests/test_logistics_domain.py` y
 `back/tests/test_migrations.py` (índice parcial de la `0008`).
 Detalles y pendientes en la [decisión 011](decisiones/011-extraccion-y-remuestreo.md).
+
+## Seguimiento del paciente (T03b)
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| GET /api/studies/tracking/mine | `patient` | Estudios propios con al menos una muestra: `study_id`, `code`, `status`, `stage`, `requires_new_extraction` |
+| GET /api/studies/{id}/tracking | `patient` | Igual que en T03, ahora también con `stage` |
+
+`/tracking/mine` existe porque, cuando llega el aviso de extracción, el turno pasa a `attended`
+y "Mis turnos" (`/appointments/mine`, solo turnos reservados) deja de mostrarlo: sin esta lista,
+el paciente no llegaría al seguimiento justo cuando la muestra está lista o hay que repetirla.
+401 sin sesión y 403 con otro rol.
+
+`stage` lo calcula el back (`tracking_stage` en `use_cases/extraction.py`). Los estados de
+bioinformática salen de sus constantes (`BIOINFORMATICS_STATUSES` y `RESULT_AVAILABLE_STATUS`):
+
+| `stage` | Texto para el paciente | Cuándo |
+| --- | --- | --- |
+| `extraction` | Extracción | Sin muestra vigente (todavía no se tomó o se sacó turno nuevo) |
+| `ready_for_pickup` | Muestra lista para retirar | Muestra `ready_for_pickup` |
+| `to_lab` | En camino al laboratorio | Muestra `with_transporter` |
+| `central_lab` | En el laboratorio central | Muestra `received` o `in_sample_set` |
+| `to_korea` | En viaje al laboratorio de análisis | Muestra `in_transit_to_korea` |
+| `analysis` | En análisis | Estudio en un estado de bioinformática |
+| `result_available` | Resultado disponible | Estudio con el resultado disponible |
+| `resample` | Hay que repetir la extracción | Estudio `requiere_remuestreo` |
+
+### Pantalla
+
+"Seguimiento" en `/paciente/estudios/ID/seguimiento` (solo `patient`; miga de pan "Mis turnos ›
+Seguimiento"). Muestra la etapa actual con una explicación corta y la lista de etapas (hechas,
+actual y por venir). En remuestreo, en lugar de la lista, explica que hay que repetir la extracción, que es el mismo
+estudio y no se paga de nuevo, el motivo (el que cargó bioinformática o, si no hay, el volumen
+mínimo de 2 ml) y el botón "Sacar turno nuevo", que lleva a la reserva con ese estudio elegido.
+Las muestras descartadas quedan en "Muestras anteriores", con la fecha de la extracción y el
+volumen. Estados de carga y de error con "Reintentar".
+
+Se llega navegando dentro de la app (la sesión está en memoria y se pierde al escribir la URL):
+- "Mis turnos": "Ver seguimiento" en cada turno y la sección "Seguimiento de tus estudios"
+  (estudios ya extraídos). Esa sección carga aparte: si falla, la lista de turnos se sigue viendo
+  y el error tiene su propio "Reintentar". Sin turnos pero con estudios en seguimiento, no
+  muestra la invitación a reservar.
+- "Día de extracción": "Ver seguimiento del estudio" (o "Ver seguimiento" cuando el estudio ya
+  no tiene turno vigente).
+
+Para probarlo en el navegador: reservar un turno, mandar el aviso con el simulador (sección
+"Simulación del bot") y entrar desde "Mis turnos". Con `1.9` ml aparece el remuestreo; con
+`2.5`, "Muestra lista para retirar".
+
+Pruebas: `back/tests/test_extraction_api.py`, `front/tests/turnos-seguimiento.test.mjs` y
+`front/tests/turnos-mis-turnos.test.mjs`.
+Detalles en la [decisión 013](decisiones/013-seguimiento-paciente.md).
+
+## Aviso de remuestreo por mail (T03c)
+
+Cuando el estudio pasa a `requiere_remuestreo` (aviso con menos de 2 ml o
+`solicitar_remuestreo`), después de confirmar los cambios se manda un mail con el servicio de
+avisos de Camila (`EnviarNotificacionUseCase`, que también lo registra en `notification_logs`).
+No hay endpoint nuevo.
+
+- **Destinatarios**: `SQLAlchemyStudyRepository.notification_recipients`: el paciente (mail
+  de su cuenta o, si no tiene, el de la ficha) y el médico que lo cargó, si hay y si su mail es
+  distinto del del paciente. Sin mail del
+  paciente no se manda y queda un warning en el log.
+- **Asunto**: `Hay que repetir la extracción del estudio EST-000001`.
+- **Mensaje**: el código del estudio, el motivo y que hay que sacar un turno nuevo desde el
+  seguimiento, sin volver a pagar. Sin nombre, DNI ni otros datos del paciente.
+- **`Idempotency-Key`**: `remuestreo-{study_id}-{sample_id}`; `referencia`: el id del estudio.
+- **Si falla** (servicio caído o que rechace el pedido, o `NOTIFICATIONS_API_KEY` sin
+  configurar), lo guardado no se deshace, el webhook responde igual 201 y el error queda en el
+  log (`No se pudo avisar el remuestreo del estudio N.`). No se reintenta solo. Un rebote del
+  mail llega después y no pasa por acá.
+
+Para probar el envío real: `NOTIFICATIONS_API_KEY` (y, si cambia, `NOTIFICATIONS_BASE_URL`) en
+`back/.env`, un paciente con un mail propio y un estudio con turno reservado. Con el back
+levantado, como en [Simulación del bot](#simulación-del-bot), desde `back`, el simulador con
+menos de 2 ml (si avisos tarda, el simulador puede cortar a los 5 s aunque el back responda
+201: el resultado se ve en el log del back o en el seguimiento):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.simular_aviso_extraccion EST-000001 1.9
+```
+
+Pruebas: `back/tests/test_extraction_api.py` (con un doble del caso de uso: ninguna sale a
+internet). Detalles en la [decisión 014](decisiones/014-aviso-remuestreo.md).
+
+## Simulador del bot de extracción (T03d)
+
+SIMULACIÓN para demo y pruebas: el administrativo manda, desde la app, el mismo aviso que
+mandaría el bot cuando un centro toma la muestra. Está apagado por defecto.
+
+| Método y ruta | Rol | Función |
+| --- | --- | --- |
+| GET /api/demo/extraction-notice/studies | `lab_administrator` | Turnos reservados: `study_id`, `code`, `patient_name`, `center_name`, `starts_at` |
+| POST /api/demo/extraction-notice | `lab_administrator` | Simula el aviso del bot para un estudio |
+
+- **Interruptor**: `DEMO_TOOLS_ENABLED=true` en `back/.env` (por defecto `false`). Apagado, los
+  dos endpoints responden 404 (antes de pedir sesión) y el menú no muestra la pantalla.
+- **Aviso simulado**: cuerpo `{"study_code": "EST-000001", "volume_ml": 1.5}`. Se procesa con el
+  mismo caso de uso que `POST /api/webhooks/extraction` (`ExtractionService.registrar_aviso`),
+  con `external_id` `sim-<uuid>` y la hora actual como `taken_at`. Mismas reglas, misma
+  respuesta (201 con `sample_id`, `sample_status`, `study_status`), mismos errores (404, 409,
+  422) y el mismo mail de remuestreo (T03c). No usa el secreto del webhook.
+- 401 sin sesión y 403 con otro rol.
+
+### Pantalla
+
+"Simular aviso del bot" en `/administrativo/simulador-bot` (solo `lab_administrator`), con la
+etiqueta SIMULACIÓN. Se elige un estudio con turno reservado, se carga el volumen en ml y
+"Enviar aviso" muestra el resultado en palabras: "Muestra lista para retirar" o "Hay que
+repetir la extracción" (con el aviso por mail al paciente). El estudio avisado sale de la
+lista porque su turno queda asistido. Estados: carga; error al cargar con "Reintentar" (salvo
+apagado: "El simulador está apagado en este servidor."); error del envío con el mensaje del
+back; y vacío.
+
+El ítem del menú aparece solo si la lista responde: el front pregunta al back una vez por
+sesión y no hay otro interruptor. Un cambio de `DEMO_TOOLS_ENABLED` se ve en el menú al recargar
+la página o volver a iniciar sesión; si esa consulta falla, el ítem no aparece hasta entonces.
+
+Turnos DEMO para el simulador: `python -m seeders logistics` (desde `back/`) deja a la paciente
+DEMO (DNI 45000001) con 3 estudios con turno reservado. Cuenta sus turnos reservados y crea los
+que falten, así que repone los que se usaron en el simulador y correrlo dos veces no duplica
+nada. Cada estudio pasa por el flujo de estudios (solicitud de Fabry, presupuesto y pago
+particular simulado) y por la reserva de turnos (10:00, primeros días hábiles libres, primer
+centro DEMO). El catálogo de genes es fijo (Fabry, gen GLA): el seeder no consulta Apigen.
+
+Para probarlo: `DEMO_TOOLS_ENABLED=true` en `back/.env` (vale desde el pedido siguiente, sin
+reiniciar el back), reservar un turno
+como paciente, entrar como administrativo y elegir "Simular aviso del bot". Con menos de 2 ml el
+estudio queda en remuestreo y se manda el mail.
+
+Pruebas: `back/tests/test_demo_extraction_api.py` y `front/tests/simulador-bot.test.mjs`.
+Detalles en la [decisión 015](decisiones/015-simulador-bot.md).

@@ -1,8 +1,8 @@
 """Versioned familiogram documents and explicit family drawing data."""
 from alembic import op
 import sqlalchemy as sa
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = depends_on = None
 
 def upgrade():

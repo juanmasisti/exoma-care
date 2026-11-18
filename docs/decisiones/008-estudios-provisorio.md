@@ -21,8 +21,8 @@ provisoria**. Tomás la amplía después con su propia migración (desde `0006`)
     el cambio en la sesión y lo confirma quien llama, junto con sus propios cambios. Así la
     reserva de un turno y el paso a `turno_sacado` se guardan o se descartan juntos, sin depender
     de cómo esté hecho el módulo de estudios. Quien la use tiene que hacer `commit`.
-- Seed DEMO optativo y repetible `seed_demo_studies`: para el paciente con DNI 45000001 crea un
-  estudio `pagado`, uno `autorizado` y uno `pendiente_pago`. Si el paciente no existe, avisa y no crea nada.
+- Seed DEMO optativo y repetible `back/seeders/studies.py` (`python -m seeders studies`): para
+  el paciente con DNI 45000001 crea un estudio `pagado`, uno `autorizado` y uno `pendiente_pago`. Si el paciente no existe, avisa y no crea nada.
 - Sin endpoints ni pantallas: se agregan en T02 cuando hagan falta.
 
 ## Ajuste en la herramienta de reconciliación de familiares (avisar a Juanma)

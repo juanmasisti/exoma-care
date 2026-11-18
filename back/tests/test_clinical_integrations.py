@@ -20,7 +20,7 @@ def test_apigen_catalog_group_and_full_payload():
         assert json.loads(request.content) == {"p_grupo_id": "grupo6"}
         return httpx.Response(200, json=payload)
     client = ApigenClient("test", base_url="https://example.test/rest/v1", transport=httpx.MockTransport(respond))
-    assert asyncio.run(client.listar_patologias("grupo6")) == payload
+    assert asyncio.run(client.listar_patologias_grupo("grupo6")) == payload
 
 
 def test_cdss_full_catalog_and_advice_contract():
@@ -77,7 +77,7 @@ def clinical_api(tmp_path):
     catalog.save("Nombre local", 2, [])
     class Genetic:
         created = []
-        async def listar_patologias(self, group):
+        async def listar_patologias_grupo(self, group):
             assert group == "grupo6"
             return [{"codigo": "FABRY", "nombre": "Fabry", "genes": ["GLA"], "herencia": "ligada_al_x", "de_grupo": False}]
         async def alta_patologia(self, *args):

@@ -186,7 +186,7 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     from alembic.script import ScriptDirectory
     config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
     scripts=ScriptDirectory.from_config(config)
-    assert scripts.get_heads()==["0015"]
+    assert scripts.get_heads()==["0016"]
     assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
     assert scripts.get_revision("0005").down_revision=="0004"
     assert scripts.get_revision("0006").down_revision=="0005"
@@ -197,3 +197,7 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     assert scripts.get_revision("0011").down_revision=="0010"
     assert scripts.get_revision("0012").down_revision=="0011"
     assert scripts.get_revision("0013").down_revision=="0012"
+    assert scripts.get_revision("0014").down_revision=="0013"
+
+    assert scripts.get_revision("0015").down_revision=="0014"
+    assert scripts.get_revision("0016").down_revision=="0015"

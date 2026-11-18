@@ -1,8 +1,8 @@
 """Link local definitions to explicitly selected external identities."""
 from alembic import op
 import sqlalchemy as sa
-revision = "0014"
-down_revision = "0013"
+revision = "0015"
+down_revision = "0014"
 branch_labels = depends_on = None
 
 def upgrade():

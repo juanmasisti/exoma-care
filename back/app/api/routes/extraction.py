@@ -9,12 +9,12 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.catalog_dependencies import require_roles
-from app.api.dependencies import get_database_session
+from app.api.dependencies import get_database_session, get_enviar_notificacion_use_case, get_notification_service
 from app.api.routes.extraction_centers import get_clock
 from app.config import get_settings
 from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
-from app.infrastructure.logging_resample_notifier import LoggingResampleNotifier
+from app.infrastructure.email_resample_notifier import EmailResampleNotifier
 from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
@@ -23,10 +23,16 @@ from app.use_cases.studies import StudyService
 
 router = APIRouter(prefix="/api", tags=["extracción"])
 patient = require_roles(UserRole.PATIENT)
+StudyCode = Annotated[str, Field(min_length=1, max_length=20)]
+# Finito, positivo y con 2 decimales: 1.999 no se redondea a 2.00 y pasa como válida.
+VolumeMl = Annotated[Decimal, Field(gt=0, max_digits=5, decimal_places=2, allow_inf_nan=False)]
 
 
-def get_resample_notifier():
-    return LoggingResampleNotifier()
+def get_resample_notifier(session: Session = Depends(get_database_session)):
+    # Sin Depends del caso de uso de avisos: sin NOTIFICATIONS_API_KEY tiraría al resolver dependencias
+    # y daría 500 en el webhook y el seguimiento. Así el error cae en el aviso, que solo lo loguea.
+    return EmailResampleNotifier(SQLAlchemyStudyRepository(session),
+                                 lambda: get_enviar_notificacion_use_case(session, get_notification_service()))
 
 
 def get_service(session: Session = Depends(get_database_session), notifier=Depends(get_resample_notifier)):
@@ -56,9 +62,8 @@ def http_errors():
 class ExtractionNoticeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     external_id: Annotated[str, Field(min_length=1, max_length=100)]
-    study_code: Annotated[str, Field(min_length=1, max_length=20)]
-    # Finito, positivo y con 2 decimales: 1.999 no se redondea a 2.00 y pasa como válida.
-    volume_ml: Annotated[Decimal, Field(gt=0, max_digits=5, decimal_places=2, allow_inf_nan=False)]
+    study_code: StudyCode
+    volume_ml: VolumeMl
     taken_at: AwareDatetime
 
 
@@ -83,11 +88,15 @@ class SampleResponse(BaseModel):
     events: list[SampleEventResponse]
 
 
-class TrackingResponse(BaseModel):
+class TrackingSummaryResponse(BaseModel):
     study_id: int
     code: str
     status: str
+    stage: str
     requires_new_extraction: bool
+
+
+class TrackingResponse(TrackingSummaryResponse):
     samples: list[SampleResponse]
 
 
@@ -101,6 +110,11 @@ def receive_extraction_notice(body: ExtractionNoticeRequest, response: Response,
     if not created:
         response.status_code = 200
     return result
+
+
+@router.get("/studies/tracking/mine", response_model=list[TrackingSummaryResponse])
+def my_study_trackings(user: AuthenticatedUser = Depends(patient), service: ExtractionService = Depends(get_service)):
+    return service.mis_seguimientos(user.id)
 
 
 @router.get("/studies/{study_id}/tracking", response_model=TrackingResponse)

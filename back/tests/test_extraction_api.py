@@ -7,20 +7,28 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.routes import extraction as extraction_routes
 from app.api.routes.extraction import get_resample_notifier
 from app.domain.entities.logistics import TIMEZONE
+from app.domain.entities.study import BIOINFORMATICS_STATUSES
 from app.infrastructure.database.logistics_models import (
     AppointmentModel, ExtractionNoticeModel, SampleEventModel, SampleModel,
 )
+from app.infrastructure.database.models import Paciente
 from app.infrastructure.database.study_models import StudyModel
+from app.infrastructure.email_resample_notifier import EmailResampleNotifier
 from app.infrastructure.repositories.sqlalchemy_appointment_repository import SQLAlchemyAppointmentRepository
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_study_repository import SQLAlchemyStudyRepository
 from app.main import app
-from app.use_cases.extraction import Conflict, ExtractionService, NotFound
+from app.use_cases.bioinformatics import RESULT_AVAILABLE_STATUS
+from app.use_cases.extraction import (
+    READY_FOR_PICKUP, REQUIRES_RESAMPLE, Conflict, ExtractionService, NotFound, tracking_stage,
+)
 from app.use_cases.studies import StudyService
 from appointments_setup import (
-    ADMIN, AUTHORIZED, DOCTOR, OTHER_PATIENT, PAID, SOFIA, book, client, login, study_status,  # noqa: F401
+    ADMIN, AUTHORIZED, DOCTOR, MONDAY_10, OTHER_PATIENT, OTHERS_STUDY, PAID, SOFIA, book, client, login,  # noqa: F401
+    study_status,
 )
 
 SECRET = "extraction-webhook-test-secret"
@@ -33,8 +41,8 @@ class RecordingNotifier:
     def __init__(self):
         self.calls = []
 
-    def avisar_remuestreo(self, study_id, motivo):
-        self.calls.append((study_id, motivo))
+    def avisar_remuestreo(self, study_id, sample_id, motivo):
+        self.calls.append((study_id, sample_id, motivo))
 
 
 @pytest.fixture
@@ -97,7 +105,7 @@ def test_1_9_ml_is_born_discarded_and_requires_resample(extraction):
     [event] = rows(engine, SampleEventModel)
     assert (event.from_status, event.to_status) == (None, "discarded")  # nace descartada, no es una transición
     assert study_status(engine, PAID) == "requiere_remuestreo"
-    assert notifier.calls == [(PAID, "Volumen insuficiente: 1.9 ml (mínimo 2 ml).")]
+    assert notifier.calls == [(PAID, sample.id, "Volumen insuficiente: 1.9 ml (mínimo 2 ml).")]
 
 
 def test_repeated_notice_returns_the_same_result_without_duplicating(extraction, caplog):
@@ -154,7 +162,7 @@ def test_notifier_failure_does_not_undo_the_notice(extraction, caplog):
     http, engine, _ = extraction
 
     class FailingNotifier:
-        def avisar_remuestreo(self, study_id, motivo):
+        def avisar_remuestreo(self, study_id, sample_id, motivo):
             raise RuntimeError("avisos caído")
 
     app.dependency_overrides[get_resample_notifier] = FailingNotifier
@@ -208,6 +216,33 @@ def test_resample_keeps_the_same_study_and_history(extraction):
     assert study_status(engine, PAID) == "listo_para_retirar"
 
 
+def test_resample_with_a_new_appointment_earlier_than_the_attended_one(extraction):
+    # El turno viejo (asistido, muestra descartada) tiene fecha posterior al nuevo reservado:
+    # el aviso tiene que ir al reservado, no al de fecha más tardía.
+    http, engine, _ = extraction
+    old = book(http, starts_at="2026-11-04T10:00:00-03:00").json()["id"]
+    notice(http, "1.9", external_id="bot-1")
+    new = book(http, starts_at=MONDAY_10).json()["id"]
+    assert notice(http, "2.5", external_id="bot-2").status_code == 201
+    first, second = rows(engine, SampleModel)
+    assert (first.appointment_id, second.appointment_id) == (old, new)
+    assert {appointment.id: appointment.status for appointment in rows(engine, AppointmentModel)} == {
+        old: "attended", new: "attended"}
+
+
+def test_an_attended_appointment_that_already_has_a_sample_is_not_reused(extraction):
+    # Remuestreo con el turno nuevo marcado ausente: el aviso no puede colgarse del viejo, que ya tiene muestra.
+    http, engine, _ = extraction
+    book(http, starts_at="2026-11-04T10:00:00-03:00")
+    notice(http, "1.9", external_id="bot-1")
+    new = book(http).json()["id"]
+    http.patch(f"/api/appointments/{new}/attendance", headers=login(http, ADMIN), json={"attended": False})
+    response = notice(http, "2.5", external_id="bot-2")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "El estudio no tiene un turno reservado o asistido para esta extracción."
+    assert count(engine, SampleModel) == 1
+
+
 def test_solicitar_remuestreo_discards_the_current_sample(extraction):
     http, engine, _ = extraction
     book(http)
@@ -221,7 +256,7 @@ def test_solicitar_remuestreo_discards_the_current_sample(extraction):
     assert (discard.from_status, discard.to_status, discard.reason, discard.actor_id) == (
         "ready_for_pickup", "discarded", "ADN insuficiente", ADMIN)
     assert study_status(engine, PAID) == "requiere_remuestreo"
-    assert notifier.calls == [(PAID, "ADN insuficiente")]
+    assert notifier.calls == [(PAID, sample.id, "ADN insuficiente")]
     # El estudio queda habilitado para sacar un turno nuevo.
     assert book(http, starts_at="2026-11-04T10:00:00-03:00").status_code == 201
 
@@ -245,6 +280,94 @@ def test_solicitar_remuestreo_rules(extraction):
     assert notifier.calls == []
 
 
+class RecordingAvisos:
+    """Doble de EnviarNotificacionUseCase (Camila): guarda lo que se mandaría, sin salir a internet."""
+
+    def __init__(self, error=None):
+        self.sent = []
+        self.error = error
+
+    async def execute(self, datos):
+        if self.error:
+            raise self.error
+        self.sent.append(datos)
+
+
+@pytest.fixture
+def email_avisos(extraction, monkeypatch):
+    """Usa el notifier real de la ruta, con el caso de uso de avisos reemplazado por el doble."""
+    avisos = RecordingAvisos()
+    monkeypatch.setattr(extraction_routes, "get_notification_service", lambda: None)
+    monkeypatch.setattr(extraction_routes, "get_enviar_notificacion_use_case", lambda session, service: avisos)
+    del app.dependency_overrides[get_resample_notifier]
+    return avisos
+
+
+def test_resample_email_goes_to_patient_and_physician(extraction, email_avisos):
+    http, engine, _ = extraction
+    with Session(engine) as session:
+        session.get(Paciente, 1).created_by_physician_id = DOCTOR
+        session.commit()
+    book(http)
+    assert notice(http, "1.9").status_code == 201
+    [sample] = rows(engine, SampleModel)
+    [datos] = email_avisos.sent
+    assert datos.destinatarios == ["demo1@example.test", "demo4@example.test"]
+    assert datos.idempotency_key == f"remuestreo-{PAID}-{sample.id}"
+    assert datos.referencia == str(PAID)
+    assert datos.asunto == "Hay que repetir la extracción del estudio EST-000001"
+    assert "EST-000001" in datos.mensaje
+    assert "Motivo: Volumen insuficiente: 1.9 ml (mínimo 2 ml)." in datos.mensaje
+    assert "sacar un turno nuevo" in datos.mensaje
+    assert "Sofía" not in datos.mensaje and "45000001" not in datos.mensaje
+
+
+def test_resample_email_from_bioinformatics_outside_the_threadpool(extraction):
+    http, engine, _ = extraction
+    book(http)
+    notice(http, "2.5")
+    avisos = RecordingAvisos()
+    with Session(engine) as session:
+        notifier = EmailResampleNotifier(SQLAlchemyStudyRepository(session), lambda: avisos)
+        service(session, notifier).solicitar_remuestreo(PAID, "ADN insuficiente", LATER)
+    [sample] = rows(engine, SampleModel)
+    [datos] = avisos.sent
+    assert datos.destinatarios == ["demo1@example.test"]  # sin médico: solo el paciente
+    assert datos.idempotency_key == f"remuestreo-{PAID}-{sample.id}"
+    assert "Motivo: ADN insuficiente" in datos.mensaje
+
+
+@pytest.mark.parametrize("break_avisos", ["send_fails", "missing_api_key"])
+def test_email_failure_does_not_break_the_webhook(extraction, monkeypatch, caplog, break_avisos):
+    http, engine, _ = extraction
+    del app.dependency_overrides[get_resample_notifier]
+    if break_avisos == "send_fails":
+        failing = RecordingAvisos(error=RuntimeError("avisos caído"))
+        monkeypatch.setattr(extraction_routes, "get_notification_service", lambda: None)
+        monkeypatch.setattr(extraction_routes, "get_enviar_notificacion_use_case", lambda session, service: failing)
+    else:
+        # Vacía y no ausente: así el .env local no la completa y el cliente real falla antes de salir a internet.
+        monkeypatch.setenv("NOTIFICATIONS_API_KEY", "")
+    book(http)
+    with caplog.at_level(logging.ERROR, logger="app.use_cases.extraction"):
+        assert notice(http, "1.9").status_code == 201
+    assert "No se pudo avisar el remuestreo del estudio 1." in caplog.text
+    assert study_status(engine, PAID) == "requiere_remuestreo"
+    assert http.get(f"/api/studies/{PAID}/tracking", headers=login(http)).status_code == 200
+
+
+def test_resample_email_without_patient_email_is_skipped(caplog):
+    class NoRecipients:
+        def notification_recipients(self, study_id):
+            return []
+
+    avisos = RecordingAvisos()
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.email_resample_notifier"):
+        EmailResampleNotifier(NoRecipients(), lambda: avisos).avisar_remuestreo(PAID, 7, "ADN insuficiente")
+    assert avisos.sent == []
+    assert "no tiene mail del paciente" in caplog.text
+
+
 def test_tracking_shows_the_samples_and_the_resample(extraction):
     http, engine, _ = extraction
     book(http)
@@ -252,8 +375,9 @@ def test_tracking_shows_the_samples_and_the_resample(extraction):
     response = http.get(f"/api/studies/{PAID}/tracking", headers=login(http))
     assert response.status_code == 200
     body = response.json()
-    assert {key: body[key] for key in ("study_id", "code", "status", "requires_new_extraction")} == {
-        "study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo", "requires_new_extraction": True}
+    assert {key: body[key] for key in ("study_id", "code", "status", "stage", "requires_new_extraction")} == {
+        "study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo", "stage": "resample",
+        "requires_new_extraction": True}
     [sample] = body["samples"]
     assert (sample["volume_ml"], sample["status"], sample["is_current"]) == ("1.90", "discarded", False)
     assert sample["events"] == [{"from_status": None, "to_status": "discarded", "reason": None,
@@ -269,3 +393,46 @@ def test_tracking_permissions(extraction):
     for study_id in (PAID, 999):
         assert http.get(f"/api/studies/{study_id}/tracking", headers=login(http, OTHER_PATIENT)).status_code == 404
     assert http.get(f"/api/studies/{PAID}/tracking", headers=login(http, SOFIA)).status_code == 200
+
+
+@pytest.mark.parametrize("sample_status, stage", [
+    (None, "extraction"), ("ready_for_pickup", "ready_for_pickup"), ("with_transporter", "to_lab"),
+    ("received", "central_lab"), ("in_sample_set", "central_lab"), ("in_transit_to_korea", "to_korea"),
+])
+def test_stage_follows_the_current_sample(sample_status, stage):
+    assert tracking_stage(READY_FOR_PICKUP, sample_status) == stage
+
+
+def test_stage_after_korea_follows_the_study_status():
+    # Estados de bioinformática tomados de sus constantes, no escritos a mano.
+    for status in BIOINFORMATICS_STATUSES:
+        assert tracking_stage(status, "in_transit_to_korea") == "analysis"
+    assert tracking_stage(RESULT_AVAILABLE_STATUS, "in_transit_to_korea") == "result_available"
+    assert tracking_stage(REQUIRES_RESAMPLE, None) == "resample"
+
+
+def test_my_trackings_list_own_studies_with_a_sample(extraction):
+    http, _, _ = extraction
+    assert http.get("/api/studies/tracking/mine", headers=login(http)).json() == []
+    book(http)
+    notice(http, "1.9")
+    assert book(http, OTHERS_STUDY, starts_at="2026-11-02T11:00:00-03:00", user=OTHER_PATIENT).status_code == 201
+    assert notice(http, "2.5", external_id="bot-2", code="EST-000005").status_code == 201
+    response = http.get("/api/studies/tracking/mine", headers=login(http))
+    assert response.status_code == 200
+    # El estudio autorizado sin muestra y el de otro paciente no aparecen.
+    assert response.json() == [{"study_id": PAID, "code": "EST-000001", "status": "requiere_remuestreo",
+                                "stage": "resample", "requires_new_extraction": True}]
+    book(http, starts_at="2026-11-04T10:00:00-03:00")
+    [rebooked] = http.get("/api/studies/tracking/mine", headers=login(http)).json()
+    assert (rebooked["stage"], rebooked["requires_new_extraction"]) == ("extraction", False)
+    # Una descartada y una vigente: una sola fila, con la etapa de la vigente.
+    assert notice(http, "2.0", external_id="bot-3").status_code == 201
+    [resampled] = http.get("/api/studies/tracking/mine", headers=login(http)).json()
+    assert (resampled["study_id"], resampled["stage"]) == (PAID, "ready_for_pickup")
+
+
+def test_my_trackings_permissions(extraction):
+    http, _, _ = extraction
+    assert http.get("/api/studies/tracking/mine").status_code == 401
+    assert http.get("/api/studies/tracking/mine", headers=login(http, DOCTOR)).status_code == 403

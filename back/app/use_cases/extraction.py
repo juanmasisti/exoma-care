@@ -6,9 +6,11 @@ from app.domain.entities.logistics import (
     MIN_SAMPLE_VOLUME_ML, AppointmentStatus, SampleStatus, can_change_sample, initial_sample_status, study_code,
     study_id_from_code,
 )
+from app.domain.entities.study import BIOINFORMATICS_STATUSES
 from app.domain.interfaces.appointment_repository import AppointmentRepository
 from app.domain.interfaces.resample_notifier import ResampleNotifier
 from app.domain.interfaces.sample_repository import CurrentSampleExists, NoticeAlreadyReceived, SampleRepository
+from app.use_cases.bioinformatics import RESULT_AVAILABLE_STATUS
 from app.use_cases.studies import StudyService
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,24 @@ REQUIRES_RESAMPLE = "requiere_remuestreo"
 # Estado del estudio que deja una muestra recién creada, según el estado con el que nace.
 STUDY_STATUS_FOR_NEW_SAMPLE = {SampleStatus.READY_FOR_PICKUP: READY_FOR_PICKUP,
                                SampleStatus.DISCARDED: REQUIRES_RESAMPLE}
+
+
+# Etapa del seguimiento según dónde está la muestra vigente. received e in_sample_set son la
+# misma etapa para el paciente: la muestra está en el laboratorio central.
+SAMPLE_STAGE = {SampleStatus.READY_FOR_PICKUP.value: "ready_for_pickup", SampleStatus.WITH_TRANSPORTER.value: "to_lab",
+                SampleStatus.RECEIVED.value: "central_lab", SampleStatus.IN_SAMPLE_SET.value: "central_lab",
+                SampleStatus.IN_TRANSIT_TO_KOREA.value: "to_korea"}
+
+
+def tracking_stage(study_status: str, current_sample_status: str | None) -> str:
+    """Etapa para el paciente. Después de Corea manda el estado del estudio (bioinformática, Camila)."""
+    if study_status == RESULT_AVAILABLE_STATUS:
+        return "result_available"
+    if study_status in BIOINFORMATICS_STATUSES:
+        return "analysis"
+    if study_status == REQUIRES_RESAMPLE:
+        return "resample"
+    return SAMPLE_STAGE.get(current_sample_status, "extraction")
 
 
 class NotFound(Exception):
@@ -72,7 +92,7 @@ class ExtractionService:
             self.samples.rollback()
             raise
         if status is SampleStatus.DISCARDED:
-            self._notify(study_id, f"Volumen insuficiente: {volume_ml} ml (mínimo {MIN_SAMPLE_VOLUME_ML} ml).")
+            self._notify(study_id, sample_id, f"Volumen insuficiente: {volume_ml} ml (mínimo {MIN_SAMPLE_VOLUME_ML} ml).")
         return self._result(sample_id, status), True
 
     def solicitar_remuestreo(self, study_id: int, motivo: str, now: datetime, actor_id: int | None = None) -> None:
@@ -95,20 +115,36 @@ class ExtractionService:
         except Exception:
             self.samples.rollback()
             raise
-        self._notify(study_id, motivo)
+        self._notify(study_id, sample["id"], motivo)
 
     def seguimiento(self, user_id: int, study_id: int) -> dict:
         status = self.appointments.study_status_for_user(study_id, user_id)
         if status is None:
             raise NotFound("El estudio no existe o no es tuyo.")
+        samples = self.samples.samples_with_events(study_id)
+        current = next((sample["status"] for sample in samples if sample["is_current"]), None)
         return {"study_id": study_id, "code": study_code(study_id), "status": status,
-                "requires_new_extraction": status == REQUIRES_RESAMPLE,
-                "samples": self.samples.samples_with_events(study_id)}
+                "stage": tracking_stage(status, current),
+                "requires_new_extraction": status == REQUIRES_RESAMPLE, "samples": samples}
+
+    def estudios_esperando_aviso(self) -> list[dict]:
+        """Turnos reservados: los estudios a los que todavía les puede llegar el aviso (simulador, T03d)."""
+        return [{"study_id": appointment["study_id"], "code": appointment["study_code"],
+                 "patient_name": f"{appointment['patient']['first_name']} {appointment['patient']['last_name']}",
+                 "center_name": appointment["center"]["name"], "starts_at": appointment["starts_at"]}
+                for appointment in self.appointments.booked()]
+
+    def mis_seguimientos(self, user_id: int) -> list[dict]:
+        """Estudios propios con alguna muestra: el turno ya pasó y "Mis turnos" no los muestra."""
+        return [{"study_id": study["id"], "code": study_code(study["id"]), "status": study["status"],
+                 "stage": tracking_stage(study["status"], study["current_sample_status"]),
+                 "requires_new_extraction": study["status"] == REQUIRES_RESAMPLE}
+                for study in self.samples.studies_with_samples_for_user(user_id)]
 
     def _attended_appointment(self, study_id: int) -> int:
         """El aviso prueba que el paciente fue: un turno reservado pasa a asistido (decisión 011)."""
-        appointment = self.samples.last_appointment(study_id)
-        if appointment is None or appointment["status"] == AppointmentStatus.ABSENT.value:
+        appointment = self.samples.appointment_for_notice(study_id)
+        if appointment is None:
             raise Conflict("El estudio no tiene un turno reservado o asistido para esta extracción.")
         # Condicional, como en turnos: si el paciente cancela a la vez, gana uno solo.
         if (appointment["status"] == AppointmentStatus.BOOKED.value
@@ -128,9 +164,9 @@ class ExtractionService:
         return {"sample_id": sample_id, "sample_status": status.value,
                 "study_status": STUDY_STATUS_FOR_NEW_SAMPLE[status]}
 
-    def _notify(self, study_id: int, motivo: str) -> None:
+    def _notify(self, study_id: int, sample_id: int, motivo: str) -> None:
         # Lo guardado ya está confirmado: un aviso fallido no lo deshace ni hace fallar el pedido.
         try:
-            self.notifier.avisar_remuestreo(study_id, motivo)
+            self.notifier.avisar_remuestreo(study_id, sample_id, motivo)
         except Exception:
             logger.exception("No se pudo avisar el remuestreo del estudio %s.", study_id)

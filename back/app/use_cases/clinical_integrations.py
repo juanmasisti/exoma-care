@@ -9,7 +9,7 @@ class ClinicalIntegrations:
     async def link(self, pathology_id, apigen_code, de_grupo, cdss_code):
         self.catalog.get(pathology_id)
         group = get_settings().apigen_group_id
-        items = await self.apigen.listar_patologias(group)
+        items = await self.apigen.listar_patologias_grupo(group)
         if not any(item["codigo"] == apigen_code and item["de_grupo"] == de_grupo for item in items):
             raise ValueError("La identidad seleccionada no existe en el catálogo de Apigen.")
         if cdss_code is not None:
