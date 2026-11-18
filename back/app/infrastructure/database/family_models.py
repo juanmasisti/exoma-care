@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Table, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.session import Base
@@ -25,6 +25,7 @@ class FamilyMemberModel(Base):
     relationship_detail: Mapped[str] = mapped_column(String(100))
     diagnosis_status: Mapped[str] = mapped_column(String(16))
     notes: Mapped[str] = mapped_column(Text)
+    diagram_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 family_member_symptoms = Table("family_member_symptoms", Base.metadata,
@@ -42,3 +43,16 @@ class PatientFamilyRevision(Base):
     changed_by_physician_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     members: Mapped[list] = mapped_column(JSON)
+
+
+class FamiliogramDocument(Base):
+    __tablename__ = "familiogram_documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), index=True)
+    patient_version: Mapped[int] = mapped_column(Integer)
+    family_version: Mapped[int] = mapped_column(Integer)
+    created_by_physician_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    svg: Mapped[bytes] = mapped_column(LargeBinary)
+    pdf: Mapped[bytes] = mapped_column(LargeBinary)
+    warnings: Mapped[list] = mapped_column(JSON)

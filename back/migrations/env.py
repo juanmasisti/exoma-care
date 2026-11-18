@@ -14,6 +14,10 @@ if context.is_offline_mode():
 else:
     engine = create_engine(url, poolclass=pool.NullPool)
     with engine.connect() as connection:
+        from app.infrastructure.database.reconcile_clinical_revision import legacy_revision
+        if legacy_revision(connection):
+            raise RuntimeError("Base clínica previa al merge: ejecutar python -m app.infrastructure.database.reconcile_clinical_revision antes de migrar.")
+        connection.rollback()
         context.configure(connection=connection, target_metadata=Base.metadata)
         with context.begin_transaction():
             context.run_migrations()

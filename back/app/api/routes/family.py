@@ -33,6 +33,12 @@ class FamilyMemberRequest(BaseModel):
     diagnosis_status: Literal["unknown", "none", "known"] = "unknown"
     diagnosis_ids: list[PositiveInt] = Field(default_factory=list, max_length=100)
     notes: str = Field(default="", max_length=4000)
+    first_name: str = Field(default="", max_length=100)
+    last_name: str = Field(default="", max_length=100)
+    provider_relationship: int | None = Field(default=None, ge=1, le=15)
+    sex: Literal["hombre", "mujer", "no_identificado"] = "no_identificado"
+    age: float | None = Field(default=None, ge=0, le=150, allow_inf_nan=False)
+    deceased: bool = False
 
     def to_domain(self):
         data = self.model_dump()
@@ -52,7 +58,6 @@ class FamilyResponse(BaseModel):
     version: int
     members: list[dict]
     updated_at: datetime | None
-    familiogram_status: Literal["not_configured"]
 
 
 def translate_error(exc):

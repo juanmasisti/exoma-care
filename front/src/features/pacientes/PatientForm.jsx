@@ -7,6 +7,7 @@ import { listPathologies } from '../patologias/api.js'
 import SymptomPicker from '../patologias/SymptomPicker.jsx'
 import { evaluatePatient, getPatient, savePatient } from './api.js'
 import ValidationResults from './ValidationResults.jsx'
+import CDSSAdvice from './CDSSAdvice.jsx'
 import ClinicalDictation from './ClinicalDictation.jsx'
 import './patients.css'
 
@@ -96,6 +97,7 @@ function PatientFormContent({ session }) {
         </fieldset>
         {catalog.filter((pathology) => form.pathology_ids.includes(pathology.id)).map((pathology) => <details key={pathology.id} className="patient-pathology-criteria"><summary>Criterios de {pathology.name}</summary><p><strong>Cardinal:</strong> {pathology.cardinal_symptom.label}</p><p><strong>Secundarios:</strong> {pathology.secondary_symptoms.map((term) => term.label).join(' · ') || 'Sin secundarios configurados.'}</p></details>)}
         <div className="patient-symptom-picker"><SymptomPicker label="Síntomas presentes" multiple selected={form.symptoms} onChange={(terms) => change('symptoms', terms)} /></div>
+        <CDSSAdvice symptoms={form.symptoms} />
         {evaluation && <div role="status"><p className={evaluation.valid ? 'patient-success' : 'patient-error'}><CheckCircle2 size={17} aria-hidden="true" />{evaluation.valid ? 'Las sospechas cumplen los criterios para guardar.' : 'Revisá las sospechas que no cumplen los criterios.'}</p><ValidationResults results={evaluation.results} /></div>}
         <p className="patient-help">La comprobación valida la coherencia de las sospechas. No establece un diagnóstico.</p>
       </section>

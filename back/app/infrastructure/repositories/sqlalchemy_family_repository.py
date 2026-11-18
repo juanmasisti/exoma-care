@@ -22,8 +22,7 @@ class SQLAlchemyFamilyRepository:
         revision = self.session.get(PatientFamilyRevision, (patient_id, record.version)) if record else None
         return {"patient_id": patient_id, "version": record.version if record else 0,
                 "members": revision.members if revision else [],
-                "updated_at": record.updated_at if record else None,
-                "familiogram_status": "not_configured"}
+                "updated_at": record.updated_at if record else None}
 
     def history(self, patient_id: int) -> list[dict]:
         rows = self.session.execute(select(PatientFamilyRevision, Usuario).join(
@@ -50,6 +49,7 @@ class SQLAlchemyFamilyRepository:
             for position, data in enumerate(members):
                 member = FamilyMemberModel(patient_id=patient_id, position=position,
                     **{key: data[key] for key in ("full_name", "relationship", "relationship_detail", "diagnosis_status", "notes")})
+                member.diagram_details = {key: data.get(key) for key in ("first_name", "last_name", "provider_relationship", "sex", "age", "deceased")}
                 self.session.add(member)
                 self.session.flush()
                 if data["symptom_ids"]:

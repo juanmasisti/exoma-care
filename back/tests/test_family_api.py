@@ -24,7 +24,7 @@ def test_empty_family_is_optional_and_does_not_create_accounts(client):
     result=http.get(url,headers=headers)
     assert result.status_code==200,result.text
     assert result.json()["members"]==[] and result.json()["version"]==0
-    assert result.json()["familiogram_status"]=="not_configured"
+    assert "familiogram_status" not in result.json()  # Documents have their own authenticated endpoint.
     assert http.get(url+"/history",headers=headers).json()==[]
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(Usuario))==4

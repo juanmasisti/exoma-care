@@ -5,6 +5,9 @@ from app.api.routes.appointments import router as appointment_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.bioinformatics import router as bioinformatics_router
 from app.api.routes.chatbot import router as chatbot_router
+from app.api.routes.terminology import router as terminology_router
+from app.api.routes.clinical_integrations import router as clinical_integrations_router
+from app.api.routes.familiogram import router as familiogram_router
 from app.api.routes.coupons import router as coupon_router
 from app.api.routes.demo import router as demo_router
 
@@ -37,4 +40,8 @@ app.include_router(appointment_router)
 app.include_router(transport_router)
 app.include_router(shipment_router)
 app.include_router(extraction_router)
+
+app.include_router(terminology_router)
+app.include_router(clinical_integrations_router)
+app.include_router(familiogram_router)
 app.include_router(demo_router)

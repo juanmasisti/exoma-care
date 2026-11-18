@@ -8,7 +8,7 @@ import { AxiosError } from 'axios'
 let server, Harness, api, setSession, createRoot, root, container, dom
 let calls, records, rejectSave, conflict
 const doctor = { access_token: 'test-token', role: 'treating_physician', rol: 'Médico' }
-const terms = [1,2,3,4].map((id) => ({ id, code: `DEMO-${id}`, label: `Síntoma demo ${id}`, code_system: 'DEMO' }))
+const terms = [1,2,3,4].map((id) => ({ id, code: String(id), label: `Síntoma demo ${id}`, code_system: 'SNOMED' }))
 const catalog = [{ id:1,name:'Enfermedad de Fabry',cardinal_symptom:terms[0],secondary_symptoms:[terms[1],terms[2]] },
   { id:2,name:'Enfermedad de Pompe',cardinal_symptom:terms[3],secondary_symptoms:[] }]
 const patient = () => ({ id:1,dni:'45000111',first_name:'Ana',last_name:'Prueba',birth_date:'1990-01-01',phone:'000',email:'ana@example.test',clinical_summary:'Resumen ficticio original',suspicion_type:'clinical',family_history:'',pathology_ids:[1],symptom_ids:[1],symptoms:[terms[0]],suspicions:[{pathology_id:1,name:'Enfermedad de Fabry',valid:true,criterion:'cardinal',definition:catalog[0]}],version:1,access_status:'pending',created_by_physician_id:1,clinical_record_complete:true })
@@ -37,7 +37,8 @@ beforeEach(() => {
     let data
     if(config.url==='/auth/login') data=doctor
     else if(config.url==='/pathologies') data=catalog
-    else if(config.url==='/symptoms') data=terms
+    else if(config.url==='/terminology/symptoms') data=terms.map(t=>({...t,selection_token:String(t.id)}))
+    else if(config.url==='/terminology/symptoms/import') data=terms.find(t=>String(t.id)===body.selection_token)
     else if(config.url.endsWith('/history')) data=[{version:1,changed_by_name:'Médico Demo',changed_at:'2026-10-29T12:00:00',snapshot:{patient_data:{clinical_summary:'Resumen ficticio original'},suspicions:patient().suspicions}}]
     else if(config.url==='/patients' && config.method==='get') {
       const q=config.params.q.toLowerCase()
@@ -73,6 +74,10 @@ function button(label) {
 }
 async function click(item) { await act(async()=>item.click()) }
 async function change(item,value) {
+  if(item.tagName==='SELECT' && item.closest('.term-picker')) {
+    await change(item.closest('.term-picker').querySelector('input'),'sintoma')
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,310))})
+  }
   await act(async()=>{
     const proto=item.tagName==='SELECT'?dom.HTMLSelectElement.prototype:item.tagName==='TEXTAREA'?dom.HTMLTextAreaElement.prototype:dom.HTMLInputElement.prototype
     Object.getOwnPropertyDescriptor(proto,'value').set.call(item,value)

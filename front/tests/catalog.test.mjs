@@ -7,7 +7,7 @@ import { AxiosError } from 'axios'
 
 let server, Harness, api, setSession, root, container, dom, createRoot
 let pathologies, requests, duplicate
-const terms = [1, 2, 3, 4].map((id) => ({ id, code: `DEMO-${id}`, label: `Síntoma demo ${id}`, code_system: 'DEMO' }))
+const terms = [1, 2, 3, 4].map((id) => ({ id, code: String(id), label: `Síntoma demo ${id}`, code_system: 'SNOMED' }))
 const manager = { access_token: 'test-token', role: 'medical_manager', rol: 'Gerente' }
 const physician = { access_token: 'test-token', role: 'treating_physician', rol: 'Médico' }
 const basePathology = () => ({ id: 1, name: 'Patología demo', cardinal_symptom: terms[0], secondary_symptoms: [terms[1], terms[2]] })
@@ -42,10 +42,8 @@ beforeEach(() => {
     const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data
     requests.push({ method: config.method, url: config.url, body })
     let data
-    if (config.url === '/symptoms') {
-      const query = config.params?.q?.toLowerCase() ?? ''
-      data = terms.filter((s) => `${s.label} ${s.code}`.toLowerCase().includes(query))
-    } else if (config.url === '/pathologies' && config.method === 'get') data = [...pathologies]
+    if (config.url === '/terminology/symptoms/import') data = terms.find(t => String(t.id) === body.selection_token)
+    else if (config.url === '/terminology/symptoms') { data = terms.map(t => ({...t, selection_token:String(t.id)})) } else if (config.url === '/pathologies' && config.method === 'get') data = [...pathologies]
     else if (config.url.endsWith('/validate-suspicion')) {
       const selected = new Set(body.symptom_ids)
       const secondary = [2, 3].filter((id) => selected.has(id))
@@ -83,6 +81,10 @@ function control(labelText) {
 }
 async function click(element) { await act(async () => element.click()) }
 async function change(element, value) {
+  if (element.tagName === 'SELECT' && element.closest('.term-picker')) {
+    await change(element.closest('.term-picker').querySelector('input'), 'sintoma')
+    await settle()
+  }
   await act(async () => {
     // El setter nativo simula la edición del usuario, sin modificar el estado de React directamente.
     const prototype = element.tagName === 'SELECT' ? dom.HTMLSelectElement.prototype : dom.HTMLInputElement.prototype

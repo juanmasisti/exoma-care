@@ -25,6 +25,39 @@ class CDSSClient:
         self._timeout = timeout
         self._transport = transport
 
+    async def _clinical_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            async with httpx.AsyncClient(base_url=self._base_url + "/", headers={"X-API-Key": self._api_key}, timeout=httpx.Timeout(60.0, connect=10.0), transport=self._transport) as client:
+                response = await client.request(method, path, **kwargs)
+            if response.status_code >= 400:
+                raise ExternalServiceError("CDSS", "No se pudo consultar la orientación CDSS.", 503 if response.status_code >= 500 else 502)
+            return response.json()
+        except httpx.TimeoutException as exc:
+            raise ExternalServiceError("CDSS", "CDSS tardó demasiado en responder. Intentá nuevamente en unos instantes.", 503) from exc
+        except (httpx.RequestError, ValueError) as exc:
+            raise ExternalServiceError("CDSS", "No se pudo consultar la orientación CDSS.", 503) from exc
+
+    async def obtener_catalogo_completo(self) -> list[dict[str, Any]]:
+        from pydantic import TypeAdapter, ValidationError
+        from app.infrastructure.external_services.clinical_contracts import CDSSPathology
+        payload = await self._clinical_request("GET", "patologias")
+        try:
+            return [item.model_dump() for item in TypeAdapter(list[CDSSPathology]).validate_python(payload)]
+        except ValidationError as exc:
+            raise ExternalServiceError("CDSS", "CDSS devolvió un catálogo inválido.", 502) from exc
+
+    async def sugerir(self, codes: list[str]) -> dict[str, Any]:
+        import re
+        from pydantic import ValidationError
+        from app.infrastructure.external_services.clinical_contracts import CDSSAdvice
+        if not 1 <= len(codes) <= 100 or any(not isinstance(code, str) or not re.fullmatch(r"[0-9]{6,18}", code) for code in codes):
+            raise ValueError("Seleccioná síntomas SNOMED válidos para consultar CDSS.")
+        payload = await self._clinical_request("POST", "diagnostico", json={"sintomas": list(dict.fromkeys(codes))})
+        try:
+            return CDSSAdvice.model_validate(payload).model_dump()
+        except ValidationError as exc:
+            raise ExternalServiceError("CDSS", "CDSS devolvió una orientación inválida.", 502) from exc
+
     async def obtener_patologias(self) -> list[dict[str, str]]:
         try:
             async with httpx.AsyncClient(

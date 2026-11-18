@@ -42,6 +42,12 @@ class Settings(BaseSettings):
             "API_SECRET_KEY_API_NOTIFICATIONS",
         ),
     )
+    snomed_url: str = ''
+    snomed_api_key: SecretStr = SecretStr('')
+    snomed_region: str = 'us-east-1'
+    familiogram_base_url: str = ''
+    familiogram_api_key: SecretStr = SecretStr('')
+    apigen_group_id: str = 'grupo6'
     # Cupones (otro grupo). Un único gerente por grupo: el primer POST fija su id, así que
     # CUPONES_GERENTE_ID debe ser una constante estable antes de la primera llamada real.
     cupones_base_url: str = "https://vekuhonbpqtzakqbcoph.supabase.co/functions/v1/cupones-api"

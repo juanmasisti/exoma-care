@@ -18,6 +18,9 @@ class Pathology:
     name: str
     cardinal_symptom: Symptom
     secondary_symptoms: tuple[Symptom, ...]
+    apigen_code: str | None = None
+    apigen_group: str | None = None
+    cdss_code: str | None = None
 
     def definition(self) -> PathologyDefinition:
         return PathologyDefinition(
@@ -31,6 +34,7 @@ class DuplicatePathologyName(ValueError):
 
 
 class PathologyRepository(Protocol):
+    def link_external(self, pathology_id: int, apigen_code: str, apigen_group: str, cdss_code: str | None) -> Pathology: ...
     def list_pathologies(self) -> list[Pathology]: ...
     def get_pathology(self, pathology_id: int) -> Pathology | None: ...
     def list_symptoms(self, query: str) -> list[Symptom]: ...
