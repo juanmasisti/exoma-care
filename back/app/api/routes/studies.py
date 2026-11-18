@@ -12,6 +12,7 @@ from app.config import (
     get_apigen_base_url,
 )
 from app.domain.entities.roles import UserRole
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.user import AuthenticatedUser
 from app.infrastructure.external_services.apigen_client import ApigenClient
 from app.infrastructure.external_services.errors import ExternalServiceError
@@ -83,6 +84,6 @@ async def analyze_study(
 
     return AnalysisResponse(
         study_id=study_id,
-        status="resultado_disponible",
+        status=StudyStatus.RESULT_AVAILABLE.value,
         result=result,
     )

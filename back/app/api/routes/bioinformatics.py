@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt
@@ -18,6 +18,7 @@ from app.api.dependencies import (
 from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
 from app.infrastructure.external_services.errors import ExternalServiceError
+from app.infrastructure.study_result_pdf import render_study_result_pdf
 from app.use_cases.bioinformatics import (
     ApigenResponseError,
     BioinformaticsStudyConflictError,
@@ -43,7 +44,16 @@ pathology_catalog_roles = require_roles(
     UserRole.BIOINFORMATICIAN, UserRole.SUPER_ADMIN
 )
 result_read_roles = require_roles(
-    UserRole.BIOINFORMATICIAN, UserRole.TREATING_PHYSICIAN, UserRole.SUPER_ADMIN
+    UserRole.BIOINFORMATICIAN,
+    UserRole.TREATING_PHYSICIAN,
+    UserRole.PATIENT,
+    UserRole.SUPER_ADMIN,
+)
+svg_read_roles = require_roles(
+    UserRole.BIOINFORMATICIAN,
+    UserRole.TREATING_PHYSICIAN,
+    UserRole.PATIENT,
+    UserRole.SUPER_ADMIN,
 )
 
 
@@ -61,6 +71,7 @@ class BioinformaticsStudyResponse(BaseModel):
     analyst_id: int | None
     created_at: datetime
     codigo_patologia: str | None = None
+    genes: list[str] = Field(default_factory=list)
     patient: dict[str, Any] | None = None
     variantes_detectadas: list[dict[str, Any]] | None
     resultado_diagnostico: str | None
@@ -88,7 +99,13 @@ class VariantSelection(BaseModel):
     gen: str = Field(min_length=1, max_length=50)
     hgvs_c: str = Field(min_length=1, max_length=200)
     proteina: str | None = Field(default=None, max_length=200)
-    clasificacion: str = Field(min_length=1, max_length=60)
+    clasificacion: Literal[
+        "patogenica",
+        "probablemente_patogenica",
+        "benigna",
+        "probablemente_benigna",
+        "vus",
+    ]
 
 
 class FinalizeAnalysisRequest(BaseModel):
@@ -159,19 +176,36 @@ def start_bioinformatics_analysis(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/variantes", response_model=VariantSearchResponse)
+@router.get(
+    "/estudios/{study_id}/variantes",
+    response_model=VariantSearchResponse,
+)
 async def search_apigen_variants(
+    study_id: PositiveInt,
     gen: str = Query(min_length=1, max_length=50),
     hgvs_c: str | None = Query(default=None, min_length=1, max_length=100),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    _actor: AuthenticatedUser = Depends(bioinformatics_roles),
+    actor: AuthenticatedUser = Depends(bioinformatics_roles),
     use_case: BuscarVariantesApigenUseCase = Depends(
         get_buscar_variantes_apigen_use_case
     ),
 ) -> dict[str, Any]:
     try:
-        return await use_case.execute(gen, hgvs_c, limit, offset)
+        return await use_case.execute(
+            study_id,
+            actor.id,
+            gen,
+            hgvs_c,
+            limit,
+            offset,
+        )
+    except BioinformaticsStudyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BioinformaticsStudyConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ExternalServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
@@ -235,7 +269,7 @@ async def resend_result_notification(
 )
 def export_study_result_svg(
     study_id: PositiveInt,
-    actor: AuthenticatedUser = Depends(result_read_roles),
+    actor: AuthenticatedUser = Depends(svg_read_roles),
     use_case: ObtenerResultadoEstudioUseCase = Depends(
         get_obtener_resultado_estudio_use_case
     ),
@@ -252,6 +286,34 @@ def export_study_result_svg(
         media_type="image/svg+xml",
         headers={
             "Content-Disposition": f'attachment; filename="estudio-{study_id}-resultado.svg"'
+        },
+    )
+
+
+@router.get(
+    "/estudios/{study_id}/resultado.pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def export_study_result_pdf(
+    study_id: PositiveInt,
+    actor: AuthenticatedUser = Depends(result_read_roles),
+    use_case: ObtenerResultadoEstudioUseCase = Depends(
+        get_obtener_resultado_estudio_use_case
+    ),
+) -> Response:
+    try:
+        study = use_case.execute(study_id, actor.id, actor.role)
+    except BioinformaticsStudyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BioinformaticsResultNotAvailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    pdf = render_study_result_pdf(study)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="estudio-{study_id}-resultado.pdf"'
         },
     )
 

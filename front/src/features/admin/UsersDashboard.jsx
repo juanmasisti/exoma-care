@@ -9,6 +9,7 @@ const roles = [
   { value: 'treating_physician', label: 'Médico tratante', plural: 'Médicos tratantes' },
   { value: 'lab_administrator', label: 'Administrativo del laboratorio', plural: 'Administrativos del laboratorio' },
   { value: 'bioinformatician', label: 'Bioinformático', plural: 'Bioinformáticos' },
+  { value: 'medical_manager', label: 'Gerente médico', plural: 'Gerentes médicos' },
 ]
 
 const emptyForm = () => ({

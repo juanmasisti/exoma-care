@@ -9,6 +9,7 @@
 .est-page button:disabled { opacity: .5; cursor: not-allowed; }
 .est-page .est-primary, a.est-primary { color: #fff; border-color: #4f46e5; background: #4f46e5; }
 .est-page .est-primary:hover:not(:disabled) { background: #4338ca; }
+.est-result-downloads { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .est-page .est-danger { color: #fff; border-color: #be123c; background: #be123c; }
 .est-page :is(button,input,select,textarea,a):focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
 .est-card { border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; padding: 24px; box-shadow: 0 2px 4px #0f172a03; }

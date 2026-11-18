@@ -10,7 +10,7 @@ from app.domain.entities.roles import UserRole
 from app.infrastructure.database.models import Paciente, Usuario
 from app.infrastructure.database.session import Base
 from app.infrastructure.database.catalog_models import PathologyModel, SymptomModel
-from app.infrastructure.database.study_models import StudyModel
+from app.infrastructure.database.study_models import StudyGeneModel, StudyModel
 from app.infrastructure.external_services.apigen_client import ApigenClient
 from app.infrastructure.external_services.errors import ExternalServiceError
 from app.infrastructure.external_services.notification_client import NotificationClient
@@ -21,6 +21,10 @@ from app.infrastructure.repositories.sqlalchemy_study_repository import (
 from app.use_cases.analisis_bioinformatico import (
     ProcesarAnalisisUseCase,
     StudyStateConflictError,
+)
+from app.use_cases.bioinformatics import (
+    BioinformaticsStudyConflictError,
+    BuscarVariantesApigenUseCase,
 )
 
 
@@ -98,6 +102,47 @@ def test_repository_lists_studies_and_persists_bioinformatics_result(factory):
         assert study.variantes_detectadas[0]["gen"] == "BRCA1"
         assert study.hallazgos_secundarios == [{"gen": "ACMG1"}]
         assert study.codigo_patologia == "BRCA1"
+
+
+def test_variant_search_uses_only_genes_requested_for_assigned_study(factory):
+    study_id, analyst_id = create_study(factory, status="en_analisis")
+    with factory.begin() as session:
+        study = session.get(StudyModel, study_id)
+        study.analyst_id = analyst_id
+        session.add_all(
+            [
+                StudyGeneModel(study_id=study_id, symbol="GAA", origin="catalogo"),
+                StudyGeneModel(study_id=study_id, symbol="GBA", origin="manual"),
+            ]
+        )
+
+    class CapturingApigen:
+        def __init__(self):
+            self.genes = []
+
+        async def buscar_variantes(self, gen, hgvs_c, limit, offset):
+            self.genes.append(gen)
+            return [{"id": 1, "hgvs_c": "c.1A>G", "clasificacion": "patogenica"}], 1
+
+    apigen = CapturingApigen()
+    with factory() as session:
+        repository = SQLAlchemyStudyRepository(session)
+        assert repository.bioinformatics_study(study_id)["genes"] == ["GAA", "GBA"]
+        use_case = BuscarVariantesApigenUseCase(repository, apigen)
+        result = asyncio.run(
+            use_case.execute(study_id, analyst_id, "gaa", limit=10, offset=0)
+        )
+        assert result["total"] == 1
+        with pytest.raises(ValueError, match="genes solicitados"):
+            asyncio.run(
+                use_case.execute(study_id, analyst_id, "BRCA1", limit=10, offset=0)
+            )
+        with pytest.raises(BioinformaticsStudyConflictError):
+            asyncio.run(
+                use_case.execute(study_id, analyst_id + 1, "GAA", limit=10, offset=0)
+            )
+
+    assert apigen.genes == ["GAA"]
 
 
 def test_study_repository_returns_patient_data_and_completed_study_history(factory):
@@ -415,6 +460,9 @@ class FakeStudyRepository:
 
     def status(self, _study_id):
         return self.current_status
+
+    def genes_for_study(self, _study_id):
+        return []
 
     def notification_recipients(self, _study_id):
         return [

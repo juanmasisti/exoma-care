@@ -14,6 +14,8 @@ from decimal import Decimal
 from pathlib import PurePath
 from typing import Any
 
+from app.domain.entities.study import StudyStatus
+
 from app.domain.entities.budget import normalize_percent, split_amounts
 from app.domain.entities.study_request import (
     MODE_CHANGE_ALLOWED_STATUSES,
@@ -116,7 +118,7 @@ class StudyPaymentService:
                 patient_cents=budget.total_cents,
             )
         else:
-            if study.status == "rechazado":
+            if study.status == StudyStatus.REJECTED:
                 raise StudyRequestConflictError(
                     "La cobertura fue rechazada: presentá una demanda o pagá como particular."
                 )
@@ -167,7 +169,7 @@ class StudyPaymentService:
         porcentaje: int | float | None = None,
     ) -> dict[str, Any]:
         study = self._study(study_id)
-        self._require_status(study, "pendiente_autorizacion")
+        self._require_status(study, StudyStatus.PENDING_AUTHORIZATION)
         budget = self._repo.get_budget(study_id)
         coverage = self._repo.get_coverage_request(study_id)
         if budget is None or coverage is None:
@@ -222,7 +224,7 @@ class StudyPaymentService:
                 ) from exc
         self._transition(
             study_id,
-            "pendiente_autorizacion",
+            StudyStatus.PENDING_AUTHORIZATION,
             status_after_authorization(split.patient_gross_cents),
         )
         self._repo.commit()
@@ -232,7 +234,7 @@ class StudyPaymentService:
         self, study_id: int, actor: AuthenticatedUser, motivo: str
     ) -> dict[str, Any]:
         study = self._study(study_id)
-        self._require_status(study, "pendiente_autorizacion")
+        self._require_status(study, StudyStatus.PENDING_AUTHORIZATION)
         reason = (motivo or "").strip()
         if not reason:
             raise ValueError("Indicá el motivo del rechazo.")
@@ -251,7 +253,11 @@ class StudyPaymentService:
             rejection_reason=reason,
             resolved_at=self._now(),
         )
-        self._transition(study_id, "pendiente_autorizacion", "rechazado")
+        self._transition(
+            study_id,
+            StudyStatus.PENDING_AUTHORIZATION,
+            StudyStatus.REJECTED,
+        )
         self._repo.commit()
         return self._detail(study_id)
 
@@ -265,7 +271,7 @@ class StudyPaymentService:
         """El paciente adjunta el PDF de la demanda tras un rechazo y pide reautorización."""
         study = self._study(study_id)
         ensure_patient_owner(self._repo, study, actor)
-        self._require_status(study, "rechazado")
+        self._require_status(study, StudyStatus.REJECTED)
         if not content:
             raise ValueError("El archivo está vacío.")
         if len(content) > MAX_DEMAND_BYTES:
@@ -299,7 +305,11 @@ class StudyPaymentService:
             size_bytes=len(content),
             uploaded_by_user_id=actor.id,
         )
-        self._transition(study_id, "rechazado", "pendiente_autorizacion")
+        self._transition(
+            study_id,
+            StudyStatus.REJECTED,
+            StudyStatus.PENDING_AUTHORIZATION,
+        )
         self._repo.commit()
         return self._detail(study_id)
 
@@ -313,7 +323,7 @@ class StudyPaymentService:
     ) -> dict[str, Any]:
         study = self._study(study_id)
         patient_id = ensure_patient_owner(self._repo, study, actor)
-        self._require_status(study, "pendiente_pago")
+        self._require_status(study, StudyStatus.PENDING_PAYMENT)
         budget = self._repo.get_budget(study_id)
         if budget is None or budget.payment_mode is None or budget.patient_cents is None:
             raise StudyRequestConflictError("Todavía no está definido el importe a pagar.")
@@ -385,7 +395,9 @@ class StudyPaymentService:
         if code is not None:
             self._repo.mark_coupon_used(code, study_id)
         self._transition(
-            study_id, "pendiente_pago", status_after_patient_payment(budget.payment_mode)
+            study_id,
+            StudyStatus.PENDING_PAYMENT,
+            status_after_patient_payment(budget.payment_mode),
         )
         self._repo.commit()
         return self._detail(study_id)
@@ -396,18 +408,20 @@ class StudyPaymentService:
         self._repo.delete_operation(operation_id)
         self._repo.commit()
 
-    def _transition(self, study_id: int, expected: str, new: str) -> None:
+    def _transition(
+        self, study_id: int, expected: StudyStatus, new: StudyStatus
+    ) -> None:
         if not self._repo.transition_status(study_id, expected, new):
             self._repo.rollback()
             raise StudyRequestConflictError(
                 "El estado del estudio cambió mientras se procesaba la operación."
             )
 
-    def _require_status(self, study, expected: str) -> None:
+    def _require_status(self, study, expected: StudyStatus) -> None:
         if study.status != expected:
             raise StudyRequestConflictError(
-                f"La operación requiere un estudio en estado '{expected}' "
-                f"(estado actual: '{study.status}')."
+                f"La operación requiere un estudio en estado '{expected.value}' "
+                f"(estado actual: '{study.status.value}')."
             )
 
     def _study(self, study_id: int):

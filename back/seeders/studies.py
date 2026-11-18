@@ -2,10 +2,12 @@ from sqlalchemy import select
 
 from app.infrastructure.database.models import Paciente
 from app.infrastructure.database.session import SessionLocal
-from app.infrastructure.database.study_models import StudyModel
+from app.infrastructure.database.study_models import StudyGeneModel, StudyModel
 
 DEMO_PATIENT_DNI = "45000001"
 BIOINFORMATICS_STATUS = "en_area_bioinformatica"
+BIOINFORMATICS_STATUSES = (BIOINFORMATICS_STATUS, "en_analisis")
+DEMO_GENES = ("GAA", "GBA")
 
 
 def seed_bioinformatics_study(session_factory=SessionLocal) -> int:
@@ -21,20 +23,40 @@ def seed_bioinformatics_study(session_factory=SessionLocal) -> int:
             return 0
 
         existing = session.scalar(
-            select(StudyModel.id).where(
+            select(StudyModel).where(
                 StudyModel.patient_id == patient_id,
-                StudyModel.status == BIOINFORMATICS_STATUS,
-            )
+                StudyModel.status.in_(BIOINFORMATICS_STATUSES),
+            ).order_by(StudyModel.id.desc())
         )
         if existing is not None:
-            print(f"Estudio bioinformático DEMO existente: id={existing}.")
+            existing_genes = set(
+                session.scalars(
+                    select(StudyGeneModel.symbol).where(
+                        StudyGeneModel.study_id == existing.id
+                    )
+                )
+            )
+            session.add_all(
+                StudyGeneModel(
+                    study_id=existing.id,
+                    symbol=symbol,
+                    origin="manual",
+                )
+                for symbol in DEMO_GENES
+                if symbol not in existing_genes
+            )
+            print(f"Estudio bioinformático DEMO existente: id={existing.id}.")
             return 0
 
-        session.add(
-            StudyModel(
-                patient_id=patient_id,
-                status=BIOINFORMATICS_STATUS,
-            )
+        study = StudyModel(
+            patient_id=patient_id,
+            status=BIOINFORMATICS_STATUS,
+        )
+        session.add(study)
+        session.flush()
+        session.add_all(
+            StudyGeneModel(study_id=study.id, symbol=symbol, origin="manual")
+            for symbol in DEMO_GENES
         )
     print("Estudio bioinformático DEMO creado y disponible para ser tomado.")
     return 1

@@ -5,7 +5,7 @@ import jwt
 from app.config import get_jwt_secret
 from app.domain.entities.user import AuthenticatedUser
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 24 * 60
 
 
 def create_access_token(user: AuthenticatedUser) -> str:

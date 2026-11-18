@@ -110,9 +110,10 @@ def get_iniciar_analisis_estudio_use_case(
 
 
 def get_buscar_variantes_apigen_use_case(
+    session: Session = Depends(get_database_session),
     apigen: ApigenClient = Depends(get_apigen_client),
 ) -> BuscarVariantesApigenUseCase:
-    return BuscarVariantesApigenUseCase(apigen)
+    return BuscarVariantesApigenUseCase(SQLAlchemyStudyRepository(session), apigen)
 
 
 def get_finalizar_analisis_bioinformatico_use_case(

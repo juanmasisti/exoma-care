@@ -30,6 +30,7 @@ STUDY = {
     "patient_dni": "DEMO-3",
     "status": "en_analisis",
     "analyst_id": 1,
+    "genes": ["BRCA1"],
     "created_at": datetime(2026, 11, 14, tzinfo=timezone.utc),
     "variantes_detectadas": None,
     "resultado_diagnostico": None,
@@ -61,7 +62,10 @@ class FakeStartStudy:
 
 
 class FakeSearchVariants:
-    async def execute(self, gen, hgvs_c, limit, offset):
+    async def execute(self, study_id, analyst_id, gen, hgvs_c, limit, offset):
+        assert study_id == 8
+        assert analyst_id == 1
+        assert gen == "BRCA1"
         return {
             "items": [
                 {
@@ -121,6 +125,7 @@ def api_client(tmp_path, monkeypatch):
             (1, UserRole.BIOINFORMATICIAN),
             (2, UserRole.PATIENT),
             (3, UserRole.SUPER_ADMIN),
+            (4, UserRole.TREATING_PHYSICIAN),
         ):
             session.add(
                 Usuario(
@@ -194,7 +199,7 @@ def test_bioinformatics_routes_only_allow_bioinformatician(api_client):
     requests = (
         ("GET", "/api/bioinformatica/estudios", None),
         ("PATCH", "/api/bioinformatica/estudios/8/iniciar", None),
-        ("GET", "/api/bioinformatica/variantes?gen=BRCA1", None),
+        ("GET", "/api/bioinformatica/estudios/8/variantes?gen=BRCA1", None),
         (
             "POST",
             "/api/bioinformatica/estudios/8/resultados",
@@ -222,12 +227,14 @@ def test_bioinformatics_routes_only_allow_bioinformatician(api_client):
 
 def test_bioinformatics_routes_list_start_search_and_finalize(api_client):
     headers = auth_headers(1)
-    assert api_client.patch(
+    started = api_client.patch(
         "/api/bioinformatica/estudios/8/iniciar", headers=headers
-    ).json()["status"] == "en_analisis"
+    )
+    assert started.json()["status"] == "en_analisis"
+    assert started.json()["genes"] == ["BRCA1"]
 
     search = api_client.get(
-        "/api/bioinformatica/variantes",
+        "/api/bioinformatica/estudios/8/variantes",
         params={"gen": "BRCA1", "hgvs_c": "c.1", "limit": 10, "offset": 5},
         headers=headers,
     )
@@ -306,4 +313,27 @@ def test_study_result_can_be_downloaded_as_safe_svg(api_client):
     assert "<svg " in response.text
     assert "Paciente &lt;Demo&gt;" in response.text
     assert "BRCA1 - c.1A&gt;G - vus" in response.text
-    assert api_client.get(path, headers=auth_headers(2)).status_code == 403
+    patient_response = api_client.get(path, headers=auth_headers(2))
+    assert patient_response.status_code == 200
+    assert patient_response.headers["content-type"].startswith("image/svg+xml")
+    assert 'filename="estudio-8-resultado.svg"' in patient_response.headers["content-disposition"]
+    physician_response = api_client.get(path, headers=auth_headers(4))
+    assert physician_response.status_code == 200
+    assert physician_response.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_study_result_can_be_downloaded_as_pdf(api_client):
+    path = "/api/bioinformatica/estudios/8/resultado.pdf"
+    assert api_client.get(path).status_code == 401
+
+    for user_id in (1, 2, 3):
+        response = api_client.get(path, headers=auth_headers(user_id))
+        if user_id == 2:
+            assert response.status_code == 200
+        else:
+            assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.content.startswith(b"%PDF")
+        assert response.headers["content-disposition"].endswith(
+            'filename="estudio-8-resultado.pdf"'
+        )

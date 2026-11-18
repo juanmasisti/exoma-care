@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from app.domain.entities.study import StudyStatus
 from app.domain.interfaces.study_repository import StudyRepository
 
-AVAILABLE_STATUS = "en_area_bioinformatica"
-RESULT_STATUS = "resultado_disponible"
+AVAILABLE_STATUS = StudyStatus.IN_BIOINFORMATICS
+RESULT_STATUS = StudyStatus.RESULT_AVAILABLE
 
 
 class ApigenGateway(Protocol):

@@ -4,21 +4,26 @@ from typing import Any
 from sqlalchemy import String, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.domain.entities.study import BIOINFORMATICS_STATUSES
+from app.domain.entities.study import BIOINFORMATICS_STATUSES, StudyStatus
 from app.infrastructure.database.models import Paciente, Usuario
 from app.infrastructure.database.patient_clinical_models import PatientClinicalRevision
-from app.infrastructure.database.study_models import StudyModel
+from app.infrastructure.database.study_models import StudyGeneModel, StudyModel
 
 
 class SQLAlchemyStudyRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def status(self, study_id: int) -> str | None:
+    def patient_id_for_user(self, user_id: int) -> int | None:
+        return self.session.scalar(
+            select(Paciente.id).where(Paciente.usuario_id == user_id)
+        )
+
+    def status(self, study_id: int) -> StudyStatus | None:
         study = self.session.get(StudyModel, study_id)
         return study.status if study is not None else None
 
-    def set_status(self, study_id: int, status: str) -> bool:
+    def set_status(self, study_id: int, status: StudyStatus) -> bool:
         study = self.session.get(StudyModel, study_id)
         if study is None:
             return False
@@ -32,9 +37,9 @@ class SQLAlchemyStudyRepository:
             update(StudyModel)
             .where(
                 StudyModel.id == study_id,
-                StudyModel.status == "en_area_bioinformatica",
+                StudyModel.status == StudyStatus.IN_BIOINFORMATICS,
             )
-            .values(status="en_analisis", analyst_id=analyst_id)
+            .values(status=StudyStatus.UNDER_ANALYSIS, analyst_id=analyst_id)
         )
         self.session.commit()
         return result.rowcount == 1
@@ -44,7 +49,7 @@ class SQLAlchemyStudyRepository:
             update(StudyModel)
             .where(
                 StudyModel.id == study_id,
-                StudyModel.status == "en_analisis",
+                StudyModel.status == StudyStatus.UNDER_ANALYSIS,
                 StudyModel.analyst_id.is_(None),
             )
             .values(analyst_id=analyst_id)
@@ -61,10 +66,10 @@ class SQLAlchemyStudyRepository:
             update(StudyModel)
             .where(
                 StudyModel.id == study_id,
-                StudyModel.status == "en_analisis",
+                StudyModel.status == StudyStatus.UNDER_ANALYSIS,
                 StudyModel.analyst_id == analyst_id,
             )
-            .values(status="en_area_bioinformatica", analyst_id=None)
+            .values(status=StudyStatus.IN_BIOINFORMATICS, analyst_id=None)
         )
         self.session.commit()
         return result.rowcount == 1
@@ -76,10 +81,10 @@ class SQLAlchemyStudyRepository:
             update(StudyModel)
             .where(
                 StudyModel.id == study_id,
-                StudyModel.status == "en_analisis",
+                StudyModel.status == StudyStatus.UNDER_ANALYSIS,
                 StudyModel.analyst_id == analyst_id,
             )
-            .values(status="resultado_disponible", result_json=result_data)
+            .values(status=StudyStatus.RESULT_AVAILABLE, result_json=result_data)
         )
         self.session.commit()
         return result.rowcount == 1
@@ -90,7 +95,7 @@ class SQLAlchemyStudyRepository:
         study = self.session.scalar(
             select(StudyModel).where(
                 StudyModel.id == study_id,
-                StudyModel.status == "resultado_disponible",
+                StudyModel.status == StudyStatus.RESULT_AVAILABLE,
                 StudyModel.analyst_id == analyst_id,
             )
         )
@@ -134,7 +139,10 @@ class SQLAlchemyStudyRepository:
                 .join(StudyModel, StudyModel.patient_id == Paciente.id)
                 .where(
                     StudyModel.id == study_id,
-                    Paciente.created_by_physician_id == physician_id,
+                    or_(
+                        StudyModel.physician_id == physician_id,
+                        Paciente.created_by_physician_id == physician_id,
+                    ),
                 )
             )
             is not None
@@ -155,11 +163,20 @@ class SQLAlchemyStudyRepository:
             return None
         return self._study_summary(study)
 
+    def genes_for_study(self, study_id: int) -> list[str]:
+        return list(
+            self.session.scalars(
+                select(StudyGeneModel.symbol)
+                .where(StudyGeneModel.study_id == study_id)
+                .order_by(StudyGeneModel.id)
+            )
+        )
+
     def list_study_history(self, query: str = "") -> list[dict[str, Any]]:
         statement = (
             select(StudyModel)
             .join(Paciente, Paciente.id == StudyModel.patient_id)
-            .where(StudyModel.status == "resultado_disponible")
+            .where(StudyModel.status == StudyStatus.RESULT_AVAILABLE)
         )
         search = query.strip()
         if search:
@@ -228,6 +245,7 @@ class SQLAlchemyStudyRepository:
             "analyst_id": study.analyst_id,
             "created_at": study.created_at,
             "codigo_patologia": study.codigo_patologia,
+            "genes": self.genes_for_study(study.id),
             "variantes_detectadas": study.variantes_detectadas,
             "resultado_diagnostico": study.resultado_diagnostico,
             "hallazgos_secundarios": study.hallazgos_secundarios,
@@ -263,7 +281,7 @@ class SQLAlchemyStudyRepository:
                 or_(StudyModel.analyst_id.is_(None), StudyModel.analyst_id == analyst_id),
             )
             .values(
-                status="resultado_disponible",
+                status=StudyStatus.RESULT_AVAILABLE,
                 analyst_id=analyst_id,
                 variantes_detectadas=variantes_detectadas,
                 resultado_diagnostico=resultado_diagnostico,

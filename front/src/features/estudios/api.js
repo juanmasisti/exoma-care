@@ -9,6 +9,30 @@ export async function createStudyRequest(payload) { return (await api.post(BASE,
 export async function listStudyRequests() { return (await api.get(BASE)).data }
 export async function getStudyRequest(studyId) { return (await api.get(`${BASE}/${studyId}`)).data }
 
+async function downloadStudyFile(studyId, format, mediaType) {
+  const response = await api.get(
+    `/bioinformatica/estudios/${studyId}/resultado.${format}`,
+    { responseType: 'blob' },
+  )
+  const blob = new Blob([response.data], { type: mediaType })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `estudio-${studyId}-resultado.${format}`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+export function downloadStudyResult(studyId) {
+  return downloadStudyFile(studyId, 'pdf', 'application/pdf')
+}
+
+export function downloadStudyResultSvg(studyId) {
+  return downloadStudyFile(studyId, 'svg', 'image/svg+xml')
+}
+
 // --- Presupuesto (EC-11) ---
 // Emitir devuelve solo el presupuesto: se vuelve a leer el estudio para que la pantalla reciba el detalle completo.
 export async function issueBudget(studyId) {

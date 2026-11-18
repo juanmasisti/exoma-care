@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.domain.entities.logistics import TIMEZONE, AppointmentStatus, can_change_appointment, is_valid_slot, study_code
+from app.domain.entities.study import StudyStatus
 from app.domain.interfaces.appointment_repository import AppointmentRepository, SlotOrStudyTaken
 from app.domain.interfaces.extraction_center_repository import ExtractionCenterRepository
 from app.use_cases.studies import StudyService
@@ -50,7 +51,11 @@ class AppointmentService:
             if self.appointments.study_has_booked(study_id):
                 raise AppointmentConflict("El estudio ya tiene un turno vigente.") from None
             raise AppointmentConflict("El horario ya está reservado en este centro.") from None
-        self._commit_with(lambda: self.studies.cambiar_estado_estudio(study_id, "turno_sacado"))
+        self._commit_with(
+            lambda: self.studies.cambiar_estado_estudio(
+                study_id, StudyStatus.APPOINTMENT_BOOKED
+            )
+        )
         return self.appointments.get(appointment_id)
 
     def cancelar(self, user_id: int, appointment_id: int, now: datetime) -> None:
@@ -64,7 +69,10 @@ class AppointmentService:
         if appointment["starts_at"] <= now:
             raise AppointmentConflict("No se puede cancelar un turno que ya empezó.")
         # Si estudios ya avanzó el estado, restaurar study_status_before lo haría retroceder.
-        if self.appointments.study_status_for_user(appointment["study_id"], user_id) != "turno_sacado":
+        if (
+            self.appointments.study_status_for_user(appointment["study_id"], user_id)
+            != StudyStatus.APPOINTMENT_BOOKED
+        ):
             raise AppointmentConflict("El turno ya no se puede cancelar: el estudio pasó a otra etapa.")
         self._close(appointment, AppointmentStatus.CANCELLED, not_booked, cancelled_at=now)
         self._commit_with(lambda: self.studies.cambiar_estado_estudio(appointment["study_id"],

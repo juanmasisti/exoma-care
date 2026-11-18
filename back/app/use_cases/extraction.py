@@ -6,7 +6,7 @@ from app.domain.entities.logistics import (
     MIN_SAMPLE_VOLUME_ML, AppointmentStatus, SampleStatus, can_change_sample, initial_sample_status, study_code,
     study_id_from_code,
 )
-from app.domain.entities.study import BIOINFORMATICS_STATUSES
+from app.domain.entities.study import BIOINFORMATICS_STATUSES, StudyStatus
 from app.domain.interfaces.appointment_repository import AppointmentRepository
 from app.domain.interfaces.resample_notifier import ResampleNotifier
 from app.domain.interfaces.sample_repository import CurrentSampleExists, NoticeAlreadyReceived, SampleRepository
@@ -15,8 +15,8 @@ from app.use_cases.studies import StudyService
 
 logger = logging.getLogger(__name__)
 
-READY_FOR_PICKUP = "listo_para_retirar"
-REQUIRES_RESAMPLE = "requiere_remuestreo"
+READY_FOR_PICKUP = StudyStatus.READY_FOR_PICKUP
+REQUIRES_RESAMPLE = StudyStatus.RESAMPLE_REQUIRED
 # Estado del estudio que deja una muestra recién creada, según el estado con el que nace.
 STUDY_STATUS_FOR_NEW_SAMPLE = {SampleStatus.READY_FOR_PICKUP: READY_FOR_PICKUP,
                                SampleStatus.DISCARDED: REQUIRES_RESAMPLE}
@@ -29,7 +29,9 @@ SAMPLE_STAGE = {SampleStatus.READY_FOR_PICKUP.value: "ready_for_pickup", SampleS
                 SampleStatus.IN_TRANSIT_TO_KOREA.value: "to_korea"}
 
 
-def tracking_stage(study_status: str, current_sample_status: str | None) -> str:
+def tracking_stage(
+    study_status: StudyStatus | str, current_sample_status: str | None
+) -> str:
     """Etapa para el paciente. Después de Corea manda el estado del estudio (bioinformática, Camila)."""
     if study_status == RESULT_AVAILABLE_STATUS:
         return "result_available"
@@ -76,7 +78,7 @@ class ExtractionService:
             study_status = self.samples.study_status(study_id) if study_id is not None else None
             if study_status is None:
                 raise NotFound("El estudio no existe.")
-            if study_status != "turno_sacado":
+            if study_status != StudyStatus.APPOINTMENT_BOOKED:
                 raise Conflict("El estudio no está esperando una extracción.")
             appointment_id = self._attended_appointment(study_id)
             status = initial_sample_status(volume_ml)
