@@ -5,6 +5,7 @@ import itertools
 from datetime import UTC, date, datetime
 from typing import Any
 
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.study_request import (
     Coupon,
     CoverageRequest,
@@ -116,7 +117,7 @@ class InMemoryStudyRequestRepository:
             "id": study_id,
             "patient_id": patient_id,
             "physician_id": physician_id,
-            "status": "creado",
+            "status": StudyStatus.CREATED,
             "include_secondary_findings": include_secondary_findings,
             "created_at": _now(),
             "pathologies": tuple(pathologies),
@@ -127,6 +128,9 @@ class InMemoryStudyRequestRepository:
     def get_study(self, study_id):
         data = self.s["studies"].get(study_id)
         return StudyRequest(**data) if data else None
+
+    def get_bioinformatics_result(self, study_id):
+        return None
 
     def list_studies(self, *, physician_id=None, patient_id=None):
         return [

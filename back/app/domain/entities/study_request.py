@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.domain.entities.study import StudyStatus
+
 PAYMENT_MODES = ("particular", "obra_social")
 GENE_ORIGINS = ("catalogo", "manual")
 # Estados de la solicitud de cobertura (los define la API de obras sociales).
@@ -11,30 +13,36 @@ COUPON_STATUSES = ("disponible", "medico", "paciente", "canjeando", "usado")
 OPERATION_TYPES = ("cobro_paciente", "cobertura_obra_social")
 
 # La modalidad de pago se elige una vez; solo se reabre si la obra social rechazó.
-MODE_CHANGE_ALLOWED_STATUSES = frozenset({"creado", "rechazado"})
+MODE_CHANGE_ALLOWED_STATUSES = frozenset(
+    {StudyStatus.CREATED, StudyStatus.REJECTED}
+)
 
 STUDY_ID_REFERENCE_PREFIX = "estudio-"
 
 
-def status_after_mode_choice(mode: str) -> str:
+def status_after_mode_choice(mode: str) -> StudyStatus:
     if mode == "particular":
-        return "pendiente_pago"
+        return StudyStatus.PENDING_PAYMENT
     if mode == "obra_social":
-        return "pendiente_autorizacion"
+        return StudyStatus.PENDING_AUTHORIZATION
     raise ValueError(f"Modalidad de pago inválida: {mode}.")
 
 
-def status_after_authorization(patient_gross_cents: int) -> str:
+def status_after_authorization(patient_gross_cents: int) -> StudyStatus:
     """Con cobertura total no queda nada por pagar; si no, el paciente paga el resto."""
-    return "autorizado" if patient_gross_cents == 0 else "pendiente_pago"
+    return (
+        StudyStatus.AUTHORIZED
+        if patient_gross_cents == 0
+        else StudyStatus.PENDING_PAYMENT
+    )
 
 
-def status_after_patient_payment(mode: str) -> str:
+def status_after_patient_payment(mode: str) -> StudyStatus:
     """Pago particular: pagado. Resto de una cobertura parcial: ya estaba autorizado."""
     if mode == "particular":
-        return "pagado"
+        return StudyStatus.PAID
     if mode == "obra_social":
-        return "autorizado"
+        return StudyStatus.AUTHORIZED
     raise ValueError(f"Modalidad de pago inválida: {mode}.")
 
 
@@ -55,7 +63,7 @@ class StudyRequest:
     id: int
     patient_id: int
     physician_id: int | None
-    status: str
+    status: StudyStatus
     include_secondary_findings: bool
     created_at: datetime
     pathologies: tuple[PathologyRef, ...]

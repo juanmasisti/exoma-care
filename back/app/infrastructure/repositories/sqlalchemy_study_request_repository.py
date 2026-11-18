@@ -11,6 +11,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain.entities.study import StudyStatus
+
 from app.domain.entities.roles import UserRole
 from app.domain.entities.study_request import (
     Coupon,
@@ -123,7 +125,7 @@ class SqlAlchemyStudyRequestRepository:
         study = StudyModel(
             patient_id=patient_id,
             physician_id=physician_id,
-            status="creado",
+            status=StudyStatus.CREATED,
             include_secondary_findings=include_secondary_findings,
         )
         self._session.add(study)
@@ -145,13 +147,32 @@ class SqlAlchemyStudyRequestRepository:
         ).scalar_one_or_none()
         return self._study(study) if study else None
 
+    def get_bioinformatics_result(self, study_id: int) -> dict[str, Any] | None:
+        study = self._session.get(StudyModel, study_id)
+        if study is None or study.status != StudyStatus.RESULT_AVAILABLE:
+            return None
+        return {
+            "status": study.status,
+            "codigo_patologia": study.codigo_patologia,
+            "resultado_diagnostico": study.resultado_diagnostico,
+            "variantes_detectadas": study.variantes_detectadas or [],
+            "hallazgos_secundarios": study.hallazgos_secundarios or [],
+            "fecha_reevaluacion": (
+                study.fecha_reevaluacion.isoformat()
+                if study.fecha_reevaluacion
+                else None
+            ),
+        }
+
     def list_studies(
         self, *, physician_id: int | None = None, patient_id: int | None = None
     ) -> list[StudyRequest]:
-        # Solo solicitudes de estudio (con médico solicitante); los estudios previos no entran.
-        query = select(StudyModel).where(StudyModel.physician_id.is_not(None))
+        query = select(StudyModel)
         if physician_id is not None:
             query = query.where(StudyModel.physician_id == physician_id)
+        elif patient_id is None:
+            # Las vistas administrativas muestran solicitudes, no registros históricos.
+            query = query.where(StudyModel.physician_id.is_not(None))
         if patient_id is not None:
             query = query.where(StudyModel.patient_id == patient_id)
         rows = self._session.execute(
@@ -159,7 +180,9 @@ class SqlAlchemyStudyRequestRepository:
         ).scalars()
         return [self._study(study) for study in rows]
 
-    def transition_status(self, study_id: int, expected: str, new: str) -> bool:
+    def transition_status(
+        self, study_id: int, expected: StudyStatus, new: StudyStatus
+    ) -> bool:
         result = self._session.execute(
             update(StudyModel)
             .where(StudyModel.id == study_id, StudyModel.status == expected)

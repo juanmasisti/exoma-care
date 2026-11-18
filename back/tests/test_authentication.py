@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+
+import jwt
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_authenticate_user_use_case
@@ -30,7 +33,8 @@ def create_use_case(role: UserRole) -> AutenticarUsuarioUseCase:
 
 
 def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-only-secret-with-at-least-32-bytes")
+    secret = "test-only-secret-with-at-least-32-bytes"
+    monkeypatch.setenv("JWT_SECRET_KEY", secret)
     app.dependency_overrides[get_authenticate_user_use_case] = lambda: create_use_case(
         UserRole.PATIENT
     )
@@ -53,6 +57,14 @@ def test_patient_login_returns_patient_dashboard(monkeypatch) -> None:
     assert response.json()["redirect_to"] == "/paciente/dashboard"
     assert response.json()["token_type"] == "bearer"
     assert response.json()["access_token"]
+    token_payload = jwt.decode(
+        response.json()["access_token"],
+        secret,
+        algorithms=["HS256"],
+    )
+    issued_at = datetime.fromtimestamp(token_payload["iat"], timezone.utc)
+    expires_at = datetime.fromtimestamp(token_payload["exp"], timezone.utc)
+    assert (expires_at - issued_at).total_seconds() == 24 * 60 * 60
 
 
 def test_non_patient_login_does_not_redirect_to_patient_dashboard(

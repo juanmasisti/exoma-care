@@ -10,6 +10,7 @@ from app.domain.entities.budget import (
     to_cents,
 )
 from app.domain.entities.roles import UserRole
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.study_request import GeneRef, PathologyRef
 from app.domain.entities.user import AuthenticatedUser
 from app.domain.interfaces.gene_catalog import GeneCatalogGateway
@@ -151,7 +152,7 @@ class StudyRequestService:
         self, study_id: int, actor: AuthenticatedUser
     ) -> dict[str, Any]:
         study = self._study(study_id)
-        if study.status != "creado":
+        if study.status != StudyStatus.CREATED:
             raise StudyRequestConflictError(
                 "El presupuesto solo se emite para estudios en estado 'creado'."
             )

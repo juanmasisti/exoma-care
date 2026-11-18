@@ -119,14 +119,24 @@ def test_database_rejects_duplicate_genes_in_a_study(repo):
         new_study(repo, genes=(("GLA", "catalogo"), ("GLA", "manual")))
 
 
-def test_list_studies_filters_and_skips_legacy_rows_without_physician(repo, session):
+def test_list_studies_includes_legacy_rows_for_owner_but_not_in_general_lists(repo, session):
     mine = new_study(repo)
-    session.add(StudyModel(patient_id=1, status="pagado"))  # estudio previo, sin médico solicitante
+    legacy = StudyModel(
+        patient_id=1,
+        status="resultado_disponible",
+        resultado_diagnostico="negativo",
+        variantes_detectadas=[],
+        hallazgos_secundarios=[],
+    )
+    session.add(legacy)
     repo.commit()
+    session.refresh(legacy)
+
     assert [s.id for s in repo.list_studies()] == [mine.id]
     assert [s.id for s in repo.list_studies(physician_id=10)] == [mine.id]
     assert repo.list_studies(physician_id=11) == []
-    assert [s.id for s in repo.list_studies(patient_id=1)] == [mine.id]
+    assert [s.id for s in repo.list_studies(patient_id=1)] == [legacy.id, mine.id]
+    assert repo.get_bioinformatics_result(legacy.id)["resultado_diagnostico"] == "negativo"
 
 
 def test_transition_status_is_conditional(repo):

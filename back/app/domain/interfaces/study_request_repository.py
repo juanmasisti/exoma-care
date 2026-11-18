@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Protocol
 
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.study_request import (
     Coupon,
     CoverageRequest,
@@ -46,10 +47,13 @@ class StudyRequestRepository(Protocol):
         genes: Sequence[GeneRef],
     ) -> StudyRequest: ...
     def get_study(self, study_id: int) -> StudyRequest | None: ...
+    def get_bioinformatics_result(self, study_id: int) -> dict[str, Any] | None: ...
     def list_studies(
         self, *, physician_id: int | None = None, patient_id: int | None = None
     ) -> list[StudyRequest]: ...
-    def transition_status(self, study_id: int, expected: str, new: str) -> bool:
+    def transition_status(
+        self, study_id: int, expected: StudyStatus, new: StudyStatus
+    ) -> bool:
         """Cambia el estado solo si sigue siendo `expected` (evita carreras)."""
         ...
 

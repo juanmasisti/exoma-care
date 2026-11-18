@@ -4,8 +4,10 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
+    Enum as SQLAlchemyEnum,
     Float,
     ForeignKey,
     Integer,
@@ -14,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.domain.entities.study import STUDY_STATUSES, StudyStatus
 from app.infrastructure.database.session import Base
 
 
@@ -21,12 +24,26 @@ class StudyModel(Base):
     """PROVISORIO: mínimo para destrabar turnos; lo amplía el área de estudios (Tomás)."""
 
     __tablename__ = "studies"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN (" + ", ".join(f"'{status}'" for status in STUDY_STATUSES) + ")",
+            name="ck_studies_status_valid",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     analyst_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
-    # String y no enum de base: Tomás puede sumar estados sin migrar datos.
-    status: Mapped[str] = mapped_column(String(40))
+    status: Mapped[StudyStatus] = mapped_column(
+        SQLAlchemyEnum(
+            StudyStatus,
+            name="study_status",
+            native_enum=False,
+            create_constraint=False,
+            values_callable=lambda statuses: [status.value for status in statuses],
+            length=40,
+        )
+    )
     codigo_patologia: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Médico que pidió el estudio (EC-10). Nulo en estudios anteriores a la solicitud.
     physician_id: Mapped[int | None] = mapped_column(

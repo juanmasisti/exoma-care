@@ -29,6 +29,14 @@ function displayValue(value) {
   return String(value)
 }
 
+function studyGenes(study) {
+  if (!Array.isArray(study?.genes)) return []
+  return [...new Set(study.genes
+    .map((gene) => (typeof gene === 'string' ? gene : gene?.symbol))
+    .filter((gene) => typeof gene === 'string' && gene.trim())
+    .map((gene) => gene.trim()))]
+}
+
 function PatientDetails({ patient }) {
   if (!patient) return <p className="bioinformatics-muted">No hay información del paciente asociada a este estudio.</p>
 
@@ -108,6 +116,7 @@ function StudyCard({ study, onSelect, actionLabel, disabled, statusLabel, onRese
       {study.created_at && <span><CalendarDays size={14} aria-hidden="true" />{displayDate(study.created_at)}</span>}
       {study.analyst_id && <span>Bioinformático asignado: #{study.analyst_id}</span>}
       {study.codigo_patologia && <span>Patología: {study.codigo_patologia}</span>}
+      {studyGenes(study).length > 0 && <span>Genes solicitados: {studyGenes(study).join(', ')}</span>}
     </div>
     {study.patient && <details className="bioinformatics-details">
       <summary><UserRound size={15} aria-hidden="true" /> Datos del paciente</summary>
@@ -156,6 +165,10 @@ export default function BioinformaticsDashboard({ session }) {
   const analyzingStudies = useMemo(
     () => studies.filter((study) => study.status === BIOINFORMATICS_ACTIVE),
     [studies],
+  )
+  const selectedStudyGenes = useMemo(
+    () => studyGenes(selectedStudy),
+    [selectedStudy],
   )
   const visibleStudies = useMemo(() => {
     const list = section === 'disponibles' ? availableStudies : analyzingStudies
@@ -222,9 +235,18 @@ export default function BioinformaticsDashboard({ session }) {
     setNotice('')
     try {
       const { data } = await api.patch(`/bioinformatica/estudios/${study.id}/iniciar`)
-      setStudies((current) => current.map((item) => item.id === data.id ? data : item))
-      setSelectedStudy(data)
-      setPathology(data.codigo_patologia || '')
+      const selected = {
+        ...study,
+        ...data,
+        genes: studyGenes(data).length ? studyGenes(data) : studyGenes(study),
+      }
+      setStudies((current) => current.map((item) => item.id === selected.id ? selected : item))
+      setSelectedStudy(selected)
+      setPathology(selected.codigo_patologia || '')
+      setGene(studyGenes(selected)[0] || '')
+      setHgvs('')
+      setVariants([])
+      setSelectedVariants([])
       navigateTo('analisis')
       setNotice(`Estudio #${data.id} asignado para análisis.`)
     } catch (failure) {
@@ -236,8 +258,11 @@ export default function BioinformaticsDashboard({ session }) {
   }
 
   function selectStudy(study) {
-    setSelectedStudy(study)
+    const selected = { ...study, genes: studyGenes(study) }
+    setSelectedStudy(selected)
     setPathology(study.codigo_patologia || '')
+    setGene(selected.genes[0] || '')
+    setHgvs('')
     setVariants([])
     setSelectedVariants([])
     setError('')
@@ -246,15 +271,20 @@ export default function BioinformaticsDashboard({ session }) {
 
   async function searchVariants(event) {
     event.preventDefault()
+    const selectedGene = selectedStudyGenes.find((symbol) => symbol === gene)
+    if (!selectedStudy || !selectedGene) {
+      setError('Seleccioná un gen solicitado para este estudio.')
+      return
+    }
     setLoadingVariants(true)
     setError('')
     setNotice('')
     setSelectedVariants([])
     try {
-      const { data } = await api.get('/bioinformatica/variantes', {
-        params: { gen: gene.trim(), hgvs_c: hgvs.trim() || undefined, limit: 50, offset: 0 },
+      const { data } = await api.get(`/bioinformatica/estudios/${selectedStudy.id}/variantes`, {
+        params: { gen: selectedGene, hgvs_c: hgvs.trim() || undefined, limit: 50, offset: 0 },
       })
-      setVariants(data.items.map((variant) => ({ ...variant, gen: gene.trim() })))
+      setVariants(data.items.map((variant) => ({ ...variant, gen: selectedGene })))
     } catch (failure) {
       setError(errorMessage(failure))
     } finally {
@@ -400,8 +430,16 @@ export default function BioinformaticsDashboard({ session }) {
           </div>
           <PatientDetails patient={selectedStudy.patient} />
           <form className="bioinformatics-search-form" onSubmit={searchVariants}>
-            <label htmlFor="bioinformatics-gene">Gen para consultar en Apigen</label>
-            <input id="bioinformatics-gene" value={gene} onChange={(event) => setGene(event.target.value)} required maxLength={50} placeholder="Ingresá el símbolo del gen" />
+            <label htmlFor="bioinformatics-gene">Gen solicitado para consultar en Apigen</label>
+            <select id="bioinformatics-gene" value={gene} onChange={(event) => {
+              setGene(event.target.value)
+              setVariants([])
+              setSelectedVariants([])
+            }} required disabled={!selectedStudyGenes.length}>
+              <option value="" disabled>Seleccioná un gen del estudio</option>
+              {selectedStudyGenes.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
+            </select>
+            {!selectedStudyGenes.length && <p className="bioinformatics-muted">Este estudio no tiene genes registrados en la solicitud médica.</p>}
             <label htmlFor="bioinformatics-hgvs">HGVS c (opcional)</label>
             <input id="bioinformatics-hgvs" value={hgvs} onChange={(event) => setHgvs(event.target.value)} maxLength={100} placeholder="Ingresá la variante HGVS c" />
             <button type="submit" className="bioinformatics-primary" disabled={loadingVariants || busy}>

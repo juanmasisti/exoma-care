@@ -24,6 +24,7 @@ ManagedRole = Literal[
     "treating_physician",
     "lab_administrator",
     "bioinformatician",
+    "medical_manager",
 ]
 
 
@@ -83,6 +84,7 @@ def list_managed_users(
         UserRole.TREATING_PHYSICIAN,
         UserRole.LAB_ADMINISTRATOR,
         UserRole.BIOINFORMATICIAN,
+        UserRole.MEDICAL_MANAGER,
     ]
     return list(
         session.scalars(

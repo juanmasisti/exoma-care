@@ -131,6 +131,7 @@ def study_detail(repo: StudyRequestRepository, study: StudyRequest) -> dict[str,
     return {
         **study_summary(study, repo.patient_full_name(study.patient_id)),
         "genes": [{"symbol": g.symbol, "origin": g.origin} for g in study.genes],
+        "result": repo.get_bioinformatics_result(study.id),
         "estimated_budget": estimate,
         "budget": budget_to_dict(budget, coverage) if budget is not None else None,
         "coverage": coverage_to_dict(coverage) if coverage is not None else None,

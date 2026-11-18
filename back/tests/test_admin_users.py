@@ -136,9 +136,10 @@ def test_super_admin_creates_physician_and_receives_temporary_password(client):
     [
         ("lab_administrator", {}),
         ("bioinformatician", {}),
+        ("medical_manager", {}),
     ],
 )
-def test_super_admin_can_create_hu_roles(client, role, extra_fields):
+def test_super_admin_can_create_managed_roles(client, role, extra_fields):
     http, _ = client
     admin = login(http)
     payload = {

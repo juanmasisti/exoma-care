@@ -43,6 +43,37 @@ def test_migrations_match_models_and_keep_existing_data(tmp_path, monkeypatch):
     engine.dispose()
 
 
+def test_study_status_migration_preserves_rows_and_rejects_unknown_statuses(
+    tmp_path, monkeypatch
+):
+    database = tmp_path / "study-status.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database}")
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.upgrade(config, "0016")
+    engine = create_engine(f"sqlite:///{database}")
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO users (id, username, role, first_name, last_name, phone, email, password_hash) "
+                 "VALUES (1, 'demo', 'medical_manager', 'Demo', 'Prueba', '000', 'demo@example.test', 'x')")
+        )
+        connection.execute(
+            text("INSERT INTO patients (id, dni, nombre, apellido) VALUES (1, '45000001', 'Demo', 'Prueba')")
+        )
+        connection.execute(
+            text("INSERT INTO studies (id, patient_id, status, created_at) "
+                 "VALUES (1, 1, 'pendiente_pago', '2026-11-18')")
+        )
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT status FROM studies WHERE id = 1")) == "pendiente_pago"
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text("INSERT INTO studies (id, patient_id, status, created_at) "
+                     "VALUES (2, 1, 'estado_invalido', '2026-11-18')")
+            )
+    engine.dispose()
+
+
 def test_appointment_indexes_from_the_migration_only_cover_booked(tmp_path, monkeypatch):
     # compare_metadata no compara el WHERE de los índices parciales: se prueba con datos.
     database = tmp_path / "appointments-migration.db"
@@ -186,7 +217,7 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     from alembic.script import ScriptDirectory
     config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
     scripts=ScriptDirectory.from_config(config)
-    assert scripts.get_heads()==["0016"]
+    assert scripts.get_heads()==["0017"]
     assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
     assert scripts.get_revision("0005").down_revision=="0004"
     assert scripts.get_revision("0006").down_revision=="0005"
@@ -201,3 +232,4 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
 
     assert scripts.get_revision("0015").down_revision=="0014"
     assert scripts.get_revision("0016").down_revision=="0015"
+    assert scripts.get_revision("0017").down_revision=="0016"

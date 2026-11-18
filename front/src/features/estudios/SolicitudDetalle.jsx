@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, ArrowLeft, CheckCircle2, Dna } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Dna, Download } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import ClinicalLayout from '../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../services/api.js'
 import {
   authorizeCoverage, choosePaymentMode, getStudyRequest, issueBudget, listCoupons, listInsurers,
-  payStudy, rejectCoverage, submitDemand,
+  payStudy, rejectCoverage, submitDemand, downloadStudyResult, downloadStudyResultSvg,
 } from './api.js'
 import { dateTime, money, percentLabel, statusLabel, statusTone } from './format.js'
 import './estudios.css'
@@ -48,6 +48,43 @@ export default function SolicitudDetalle({ session }) {
         <header className="est-header"><div><span className="est-eyebrow">ESTUDIO GENÉTICO</span><h1>Estudio #{study.id}</h1><p>{study.patient_name || `Paciente ${study.patient_id}`} · creado el {dateTime(study.created_at)}</p></div>
           <span className={`est-badge est-badge-${statusTone(study.status)}`}>{statusLabel(study.status)}</span>
         </header>
+        {study.result && <section className="est-card" style={{ marginBottom: 20 }}>
+          <h2>Resultado disponible</h2>
+          <dl className="est-dl">
+            <dt>Diagnóstico</dt><dd>{study.result.resultado_diagnostico || 'No registrado'}</dd>
+            <dt>Patología</dt><dd>{study.result.codigo_patologia || 'No registrada'}</dd>
+            <dt>Variantes</dt><dd>{study.result.variantes_detectadas.length
+              ? study.result.variantes_detectadas.map((variant) =>
+                  `${variant.gen}: ${variant.hgvs_c}${variant.proteina ? ` (${variant.proteina})` : ''} — ${variant.clasificacion}`
+                ).join(' · ')
+              : 'No se registraron variantes'}</dd>
+            {study.result.hallazgos_secundarios.length > 0 && <>
+              <dt>Hallazgos secundarios</dt>
+              <dd>{study.result.hallazgos_secundarios.map((finding) =>
+                typeof finding === 'object' ? JSON.stringify(finding) : finding
+              ).join(' · ')}</dd>
+            </>}
+            {study.result.fecha_reevaluacion && <>
+              <dt>Fecha de reevaluación</dt><dd>{study.result.fecha_reevaluacion}</dd>
+            </>}
+          </dl>
+          <div className="est-result-downloads">
+            <button
+              type="button"
+              className="est-primary"
+              onClick={() => downloadStudyResult(study.id).catch((failure) => setActionError(errorMessage(failure)))}
+            >
+              <Download size={16} aria-hidden="true" />Descargar resultado PDF
+            </button>
+            <button
+              type="button"
+              className="est-primary"
+              onClick={() => downloadStudyResultSvg(study.id).catch((failure) => setActionError(errorMessage(failure)))}
+            >
+              <Download size={16} aria-hidden="true" />Descargar resultado SVG
+            </button>
+          </div>
+        </section>}
         <div className="est-grid">
           <div className="est-stack">
             <section className="est-card">
