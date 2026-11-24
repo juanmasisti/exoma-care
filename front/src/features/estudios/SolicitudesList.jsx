@@ -39,9 +39,9 @@ export default function SolicitudesList({ session }) {
           : studies.length === 0 ? <div className="est-empty"><ClipboardList size={36} aria-hidden="true" /><h3>Todavía no hay solicitudes</h3><p>{physician ? 'Creá la primera desde "Nueva solicitud".' : patient ? 'Cuando tu médico pida un estudio, lo vas a ver acá.' : 'Cuando los médicos creen solicitudes, aparecen acá.'}</p></div>
             : <div className="est-table-scroll"><table className="est-table"><thead><tr><th>Estudio</th>{!patient && <th>Paciente</th>}<th>Patologías</th><th>Genes</th><th>Estado</th><th>Creado</th><th><span className="est-sr-only">Acciones</span></th></tr></thead><tbody>
               {studies.map((study) => <tr key={study.id}>
-                <td><strong>#{study.id}</strong></td>
+                <td><strong>#{study.id}</strong>{study.is_reanalysis && <small style={{ display: 'block' }}>Reanálisis de #{study.original_study_id}</small>}</td>
                 {!patient && <td>{study.patient_name || `Paciente ${study.patient_id}`}</td>}
-                <td>{study.pathologies.map((item) => item.name).join(' · ')}</td>
+                <td>{study.pathologies.map((item) => item.name).join(' · ') || '—'}</td>
                 <td>{study.gene_count}</td>
                 <td><span className={`est-badge est-badge-${statusTone(study.status)}`}>{statusLabel(study.status)}</span></td>
                 <td>{dateTime(study.created_at)}</td>

@@ -38,7 +38,8 @@ function App() {
     <Route path="/login" element={<Navigate to="/" replace />} />
     <Route path="/estudios" element={roleRoute(['treating_physician', 'lab_administrator', 'patient', 'super_admin'], <SolicitudesList session={session} />)} />
     <Route path="/estudios/nuevo" element={roleRoute(['treating_physician'], <NuevaSolicitud session={session} />)} />
-    <Route path="/estudios/:studyId" element={roleRoute(['treating_physician', 'lab_administrator', 'patient', 'super_admin'], <SolicitudDetalle key={session?.access_token} session={session} />)} />
+    <Route path="/estudios/:studyId" element={roleRoute(['treating_physician', 'lab_administrator', 'patient', 'bioinformatician', 'super_admin'], <SolicitudDetalle key={session?.access_token} session={session} />)} />
+    <Route path="/estudios/:studyId/reanalisis" element={roleRoute(['treating_physician'], <NuevaSolicitud key="reanalisis" session={session} />)} />
     <Route path="/administrativo/simulador-bot" element={roleRoute(['lab_administrator'], <SimularAviso session={session} />)} />
     <Route path="/cupones" element={roleRoute(['medical_manager', 'treating_physician', 'patient', 'super_admin'], <Cupones session={session} />)} />
     <Route path="/catalogo/patologias" element={!session ? <Navigate to="/" replace /> : catalogAccess

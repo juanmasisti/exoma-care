@@ -48,7 +48,10 @@ export const COUPON_STATUS_LABELS = {
 }
 
 // Precio acordado con el PO: USD 500 hasta 5 genes, más USD 30 por cada gen adicional.
-export function estimateTotalCents(geneCount) {
+// Un reanálisis (EC-14) tiene un 30 % de descuento; el importe oficial lo calcula el backend.
+export const REANALYSIS_DISCOUNT_PERCENT = 30
+export function estimateTotalCents(geneCount, reanalysis = false) {
   if (geneCount <= 0) return 0
-  return 50000 + Math.max(0, geneCount - 5) * 3000
+  const gross = 50000 + Math.max(0, geneCount - 5) * 3000
+  return reanalysis ? gross - Math.round(gross * REANALYSIS_DISCOUNT_PERCENT / 100) : gross
 }

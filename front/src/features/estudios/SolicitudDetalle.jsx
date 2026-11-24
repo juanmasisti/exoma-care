@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, ArrowLeft, CheckCircle2, Dna, Download } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Dna, Download, RotateCcw } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import ClinicalLayout from '../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../services/api.js'
@@ -24,6 +24,9 @@ export default function SolicitudDetalle({ session }) {
   const role = session.role
   const admin = role === 'lab_administrator' || role === 'super_admin'
   const patient = role === 'patient'
+  const physician = role === 'treating_physician'
+  // Bioinformática entra desde su bandeja para ver el estudio de origen de un reanálisis.
+  const backTo = role === 'bioinformatician' ? '/bioinformatica/dashboard' : '/estudios'
 
   useEffect(() => {
     let active = true
@@ -42,10 +45,11 @@ export default function SolicitudDetalle({ session }) {
   const split = budget?.split
 
   return <ClinicalLayout session={session} pageLabel={study ? `Estudio #${study.id}` : 'Estudio'}><section className="est-page">
-    <Link to="/estudios" className="est-back"><ArrowLeft size={14} aria-hidden="true" />Volver a las solicitudes</Link>
+    <Link to={backTo} className="est-back"><ArrowLeft size={14} aria-hidden="true" />{role === 'bioinformatician' ? 'Volver a la bandeja' : 'Volver a las solicitudes'}</Link>
     {error ? <div role="alert" className="est-error"><p>{error}</p><button type="button" onClick={() => { setError(''); setRetry((n) => n + 1) }}>Reintentar</button></div>
       : !study ? <p role="status" className="est-loading">Cargando estudio...</p> : <>
-        <header className="est-header"><div><span className="est-eyebrow">ESTUDIO GENÉTICO</span><h1>Estudio #{study.id}</h1><p>{study.patient_name || `Paciente ${study.patient_id}`} · creado el {dateTime(study.created_at)}</p></div>
+        <header className="est-header"><div><span className="est-eyebrow">{study.is_reanalysis ? 'REANÁLISIS' : 'ESTUDIO GENÉTICO'}</span><h1>Estudio #{study.id}</h1><p>{study.patient_name || `Paciente ${study.patient_id}`} · creado el {dateTime(study.created_at)}</p>
+          {study.is_reanalysis && <Link to={`/estudios/${study.original_study_id}`} className="est-origin-link"><RotateCcw size={13} aria-hidden="true" />Reanálisis del estudio #{study.original_study_id}</Link>}</div>
           <span className={`est-badge est-badge-${statusTone(study.status)}`}>{statusLabel(study.status)}</span>
         </header>
         {study.result && <section className="est-card" style={{ marginBottom: 20 }}>
@@ -90,12 +94,26 @@ export default function SolicitudDetalle({ session }) {
             <section className="est-card">
               <h2>Pedido</h2>
               <dl className="est-dl">
-                <dt>Patologías</dt><dd>{study.pathologies.map((item) => item.name).join(' · ')}</dd>
+                <dt>Patologías</dt><dd>{study.pathologies.length ? study.pathologies.map((item) => item.name).join(' · ') : 'Sin patologías: genes elegidos a mano'}</dd>
                 <dt>Genes ({study.genes.length})</dt>
                 <dd><ul className="est-chips">{study.genes.map((gene) => <li key={gene.symbol} className={`est-chip ${gene.origin === 'catalogo' ? 'est-chip-catalog' : ''}`}>{gene.origin === 'catalogo' && <Dna size={12} aria-hidden="true" />}{gene.symbol}{gene.origin === 'manual' && <small style={{ margin: 0 }}>agregado</small>}</li>)}</ul></dd>
                 <dt>Hallazgos secundarios</dt><dd>{study.include_secondary_findings ? 'Se incluye la búsqueda' : 'No se incluyen'}</dd>
               </dl>
             </section>
+
+            {(study.reanalyses.length > 0 || (physician && study.status === 'resultado_disponible')) && <section className="est-card">
+              <h2>Reanálisis</h2>
+              {study.reanalyses.length > 0
+                ? <ul className="est-reanalyses">{study.reanalyses.map((item) => <li key={item.id}>
+                  <Link to={`/estudios/${item.id}`} className="est-link">Estudio #{item.id}</Link>
+                  <span className={`est-badge est-badge-${statusTone(item.status)}`}>{statusLabel(item.status)}</span>
+                </li>)}</ul>
+                : <p className="est-help" style={{ marginTop: 0 }}>Todavía no se pidió ningún reanálisis de este exoma.</p>}
+              {physician && study.status === 'resultado_disponible' && <>
+                <p className="est-help">Si hace falta revisar otros genes, se reanaliza el mismo exoma: sin extracción ni envío y con 30 % de descuento.</p>
+                <div className="est-actions"><Link to={`/estudios/${study.id}/reanalisis`} className="est-primary"><RotateCcw size={14} aria-hidden="true" />Solicitar reanálisis</Link></div>
+              </>}
+            </section>}
 
             <section className="est-card">
               <h2>Presupuesto</h2>
@@ -103,6 +121,7 @@ export default function SolicitudDetalle({ session }) {
                 <ul className="est-lines">
                   <li><span>Base (hasta 5 genes)</span><strong>{money(budget.base_cents)}</strong></li>
                   <li><span>{budget.extra_genes} gen(es) adicional(es)</span><strong>{money(budget.extra_cents)}</strong></li>
+                  {budget.discount_cents > 0 && <li><span>Descuento por reanálisis ({percentLabel(budget.discount_percent)})</span><strong>− {money(budget.discount_cents)}</strong></li>}
                   <li className="est-total"><span>Total</span><strong>{money(budget.total_cents)}</strong></li>
                 </ul>
                 {split && <>
@@ -167,6 +186,9 @@ function NextStep({ study, admin, patient, busy, run }) {
   }
   if (status === 'pendiente_pago') return patient ? <PayForm study={study} busy={busy} run={run} />
     : <p className="est-help" style={{ marginTop: 0 }}>Falta que el paciente abone {money(budget?.split?.patient_cents)}.</p>
+  if (study.is_reanalysis && (status === 'en_area_bioinformatica' || status === 'en_analisis')) {
+    return <div className="est-success"><CheckCircle2 size={16} aria-hidden="true" /><p>Reanálisis habilitado. No hace falta turno ni extracción: el exoma ya está en bioinformática.</p></div>
+  }
   if (status === 'pagado' || status === 'autorizado') {
     return <><div className="est-success"><CheckCircle2 size={16} aria-hidden="true" /><p>{status === 'pagado' ? 'Estudio pagado.' : 'Estudio autorizado.'} Ya está habilitado para sacar turno de extracción.</p></div>
       {patient && <div className="est-actions"><Link to="/paciente/turnos/reservar" className="est-primary">Reservar turno</Link></div>}</>
@@ -255,12 +277,14 @@ function PayForm({ study, busy, run }) {
   const [coupons, setCoupons] = useState(null)
   const [code, setCode] = useState('')
   const [loadError, setLoadError] = useState('')
+  const reanalysis = study.is_reanalysis
 
   useEffect(() => {
+    if (reanalysis) return undefined  // los cupones no se aplican a los reanálisis
     let active = true
     listCoupons('paciente').then((data) => { if (active) setCoupons(data) }).catch((failure) => { if (active) setLoadError(errorMessage(failure)) })
     return () => { active = false }
-  }, [])
+  }, [reanalysis])
 
   const coupon = coupons?.find((item) => item.code === code)
   const gross = study.budget.split.patient_cents
@@ -273,7 +297,7 @@ function PayForm({ study, busy, run }) {
       {coupon && <li><span>Cupón {percentLabel(coupon.percentage)}</span><strong>− {money(discount)}</strong></li>}
       <li className="est-total"><span>Total a pagar</span><strong>{money(gross - discount)}</strong></li>
     </ul>
-    <div>
+    {reanalysis ? <p className="est-help" style={{ margin: 0 }}>El reanálisis ya tiene su descuento: no admite cupones.</p> : <div>
       <label htmlFor="est-coupon">Cupón de descuento (opcional)</label>
       {loadError ? <p className="est-help" role="alert">{loadError}</p>
         : <select id="est-coupon" value={code} onChange={(event) => setCode(event.target.value)} disabled={!coupons}>
@@ -281,7 +305,7 @@ function PayForm({ study, busy, run }) {
           {(coupons || []).map((item) => <option key={item.code} value={item.code}>{item.code} · {percentLabel(item.percentage)}</option>)}
         </select>}
       <p className="est-help">El cupón se aplica sobre lo que pagás vos y no se puede reutilizar.</p>
-    </div>
+    </div>}
     <p className="est-help" style={{ margin: 0 }}>El pago es simulado: no se cobra ninguna tarjeta real.</p>
     <div className="est-actions"><button type="submit" className="est-primary" disabled={busy}>{busy ? 'Procesando pago...' : 'Pagar'}</button></div>
   </form>

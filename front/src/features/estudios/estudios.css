@@ -38,6 +38,7 @@
 .est-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
 .est-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 650; background: #f1f5f9; color: #334155; }
 .est-chip.est-chip-catalog { background: #eef2ff; color: #4338ca; }
+.est-chip.est-chip-muted { background: #f8fafc; color: #94a3b8; text-decoration: line-through; }
 .est-page .est-chip button { padding: 0; border: 0; background: transparent; color: inherit; line-height: 1; }
 .est-suggestions { list-style: none; margin: 6px 0 0; padding: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
 .est-patient-results { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow: auto; }
@@ -79,3 +80,8 @@
 
 @media (max-width: 1000px) { .est-grid { grid-template-columns: minmax(0,1fr); } .est-aside { position: static; } }
 @media (max-width: 650px) { .est-page { padding: 24px 16px; } .est-header { flex-direction: column; } .est-fields, .est-options { grid-template-columns: 1fr; } .est-card { padding: 18px 16px; } }
+
+/* Reanálisis (EC-14) */
+.est-origin-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; font-weight: 650; color: #4f46e5; }
+.est-reanalyses { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.est-reanalyses li { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; }
