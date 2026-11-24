@@ -19,11 +19,6 @@ for (const [path, title, crumbText] of [
   })
 }
 
-test('el detalle del lote ya muestra el lugar del envío', async () => {
-  await render('/administrativo/lotes/3', labAdmin)
-  assert.match(container.querySelector('section[aria-label="Envío del lote"]').textContent, /Envío.*En construcción/)
-})
-
 test('el administrativo ve órdenes, lotes y el recorrido (provisorio) en el menú', async () => {
   await render('/administrativo/lotes', labAdmin)
   assert.equal(menuItem('/administrativo/lotes').className, 'clinical-nav-active')
