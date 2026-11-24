@@ -130,25 +130,12 @@ CENTRAL_LAB_LATITUDE=-34.921559
 CENTRAL_LAB_LONGITUDE=-57.938362
 ```
 
-`POST /api/transport/route-preview`. Por ahora es para el rol `lab_administrator`, hasta que
-exista `transporter`. **Provisorio para la demo:** en T04 los centros salen de la orden del día.
+El endpoint provisorio `POST /api/transport/route-preview` se borró en T04: los centros salen de la
+orden del día (ver [Orden del día y transportista](#orden-del-día-y-transportista-t04)). El recorrido
+sale del Laboratorio Central (Calle 62 N° 555, La Plata) y vuelve a él. Con un solo centro no se llama
+al módulo.
 
-```json
-{"center_ids": [12, 3, 47]}
-```
-
-Devuelve los centros activos (con la misma forma que `GET /api/extraction-centers`) en el orden de
-visita. El recorrido sale del Laboratorio Central (Calle 62 N° 555, La Plata) y vuelve a él.
-
-| Caso | Respuesta |
-| --- | --- |
-| 0 o 1 centros | 200 con la misma lista, sin llamar al módulo |
-| Centro inexistente o inactivo | 404 |
-| Ids repetidos o más de 100 | 422 |
-| El módulo falla, tarda más de 5 s o devuelve un punto que no es de ningún centro | 502 con el motivo; no se arma ningún orden |
-| Sin token / otro rol | 401 / 403 |
-
-Pruebas: `tests/test_route_preview_api.py` (doble del módulo; no salen a internet).
+Pruebas del cliente: `tests/test_transport_api.py` (con un doble del módulo; no salen a internet).
 
 ## Documentos del turno (T02b)
 
@@ -477,7 +464,54 @@ Pruebas: `back/tests/test_logistics_domain.py`, `back/tests/test_logistics_base.
 
 ## Orden del día y transportista (T04)
 
-Pendiente: la completa T04 (decisión 017).
+Cada día hábil, una orden por provincia con los centros activos que tienen muestras listas para retirar,
+en el orden fijo que devuelve el módulo de recorridos. El transportista retira centro por centro y
+registra la llegada al Laboratorio Central, que recibe las muestras y dispara el armado de lotes. Detalle
+en la [decisión 017](decisiones/017-orden-del-dia.md).
+
+`TRANSPORT_ROLES` es PROVISORIO: hoy es el administrativo (decisión 016).
+
+| Endpoint | Rol | Respuesta |
+| --- | --- | --- |
+| `POST /api/transport/daily-routes` `{"date": "2026-11-02"}` | `lab_administrator` | 201 si creó alguna orden, 200 si ya estaban todas (no toca las existentes). Lista de órdenes del día |
+| `GET /api/transport/daily-routes?date=` | `lab_administrator` | órdenes del día: `province`, `status`, `stops` y `picked_up` (avance) |
+| `GET /api/transport/my-route?date=&province_id=` | `TRANSPORT_ROLES` | orden con `province`, `stops` en secuencia (centro, `picked_up_at`, `sample_codes`), `next_stop_id` y `on_board`. `province_id` es PROVISORIO |
+| `POST /api/transport/daily-routes/{id}/stops/{stop_id}/pickup` | `TRANSPORT_ROLES` | comprobante: `center`, `picked_up_at` y `sample_codes` retirados |
+| `POST /api/transport/daily-routes/{id}/arrival` | `TRANSPORT_ROLES` | `arrived_at` y `received_codes`. Llama a `SampleSetAssigner.asignar_a_sample_set` por cada muestra |
+
+| Caso | Respuesta |
+| --- | --- |
+| Sábado, domingo o feriado | 422 con el motivo |
+| El módulo de recorridos falla, tarda más de 5 s o devuelve un punto que no es de ningún centro | 502; no se guarda ninguna orden |
+| `my-route` sin orden para esa provincia y fecha; parada que no es de la orden | 404 |
+| Retirar un centro antes que el anterior, o retirarlo dos veces | 409 |
+| Llegada con centros sin retirar, o registrada dos veces | 409 |
+| Un centro se da de baja mientras se genera la orden | 409; no se guarda ninguna orden |
+| Error inesperado del armado de lotes | 500; se deshace la llegada entera |
+| Sin token / otro rol | 401 / 403 |
+
+El retiro pasa a `with_transporter` las muestras listas del centro en ese momento y guarda cada una en
+`route_pickups`. La llegada pasa a `received` exactamente esas. Las horas vienen en hora de Argentina.
+
+Pantallas:
+
+- `/administrativo/ordenes-del-dia`: fecha (hoy por defecto), "Generar órdenes" y cada provincia con
+  su avance.
+- `/transporte`: provincia (select PROVISORIO), resumen y siguiente centro. Desde ahí:
+  - `/transporte/orden`: la secuencia completa; solo se abre el siguiente centro;
+  - `/transporte/centro/:stopId` (id de la parada): confirmar el retiro y ver el comprobante;
+  - `/transporte/a-bordo`: muestras a bordo, fin de recorrido y llegada.
+
+Para probarlo con el seeder (`python -m seeders logistics`, grupo `lista`):
+
+- entrá como el administrativo DEMO y generá la orden de un día hábil;
+- en `/transporte`, elegí Buenos Aires (3 centros de La Plata) o Córdoba (1 centro);
+- retirá en orden y registrá la llegada.
+
+Mientras no esté T05, la llegada no arma lotes.
+
+Pruebas: `back/tests/test_transport_api.py`, `front/tests/transportista-ordenes.test.mjs` y
+`front/tests/transportista-recorrido.test.mjs` (armado común en `front/tests/transportista-setup.mjs`).
 
 ## Sample sets (T05)
 
