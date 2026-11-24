@@ -27,6 +27,9 @@ from app.infrastructure.database import (  # noqa: F401
 )
 
 LOGISTICS_TABLES = {"appointments", "extraction_notices", "samples", "sample_events"}
+# Tablas de la 0018 (transporte y lotes): dependen de samples, que la base legacy 0011 no tiene;
+# esta herramienta solo llega a 0013 y lo que sigue es alembic upgrade.
+TRANSPORT_TABLES = {"daily_routes", "route_stops", "route_pickups", "sample_sets", "sample_set_items"}
 LEGACY_REVISION = "0011"
 INTEGRATED_REVISION = "0013"
 
@@ -64,7 +67,7 @@ def _state(connection: Connection) -> str:
         text("SELECT version_num FROM alembic_version")
     ).all()
     if revisions == [INTEGRATED_REVISION]:
-        _require_schema(connection, Base.metadata)
+        _require_schema(connection, _metadata_without(TRANSPORT_TABLES))
         return "integrated"
     if revisions != [LEGACY_REVISION]:
         raise ValueError(
@@ -76,7 +79,7 @@ def _state(connection: Connection) -> str:
             "automáticamente."
         )
 
-    _require_schema(connection, _metadata_without(LOGISTICS_TABLES))
+    _require_schema(connection, _metadata_without(LOGISTICS_TABLES | TRANSPORT_TABLES))
     return "legacy"
 
 
@@ -94,7 +97,7 @@ def reconcile_legacy_bioinformatics_revision(connection: Connection) -> bool:
         scripts.get_revision("0007").module.upgrade()
         scripts.get_revision("0008").module.upgrade()
 
-    _require_schema(connection, Base.metadata)
+    _require_schema(connection, _metadata_without(TRANSPORT_TABLES))
     if connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall():
         raise ValueError(
             "La base tiene referencias inválidas; se revierte la reconciliación."

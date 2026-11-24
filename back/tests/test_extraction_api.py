@@ -397,17 +397,17 @@ def test_tracking_permissions(extraction):
 
 @pytest.mark.parametrize("sample_status, stage", [
     (None, "extraction"), ("ready_for_pickup", "ready_for_pickup"), ("with_transporter", "to_lab"),
-    ("received", "central_lab"), ("in_sample_set", "central_lab"), ("in_transit_to_korea", "to_korea"),
+    ("received", "central_lab"), ("in_sample_set", "central_lab"), ("in_transit_to_sequencing_lab", "to_sequencing_lab"),
 ])
 def test_stage_follows_the_current_sample(sample_status, stage):
     assert tracking_stage(READY_FOR_PICKUP, sample_status) == stage
 
 
-def test_stage_after_korea_follows_the_study_status():
+def test_stage_after_the_trip_follows_the_study_status():
     # Estados de bioinformática tomados de sus constantes, no escritos a mano.
     for status in BIOINFORMATICS_STATUSES:
-        assert tracking_stage(status, "in_transit_to_korea") == "analysis"
-    assert tracking_stage(RESULT_AVAILABLE_STATUS, "in_transit_to_korea") == "result_available"
+        assert tracking_stage(status, "in_transit_to_sequencing_lab") == "analysis"
+    assert tracking_stage(RESULT_AVAILABLE_STATUS, "in_transit_to_sequencing_lab") == "result_available"
     assert tracking_stage(REQUIRES_RESAMPLE, None) == "resample"
 
 

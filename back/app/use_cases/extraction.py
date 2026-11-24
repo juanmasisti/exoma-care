@@ -26,13 +26,13 @@ STUDY_STATUS_FOR_NEW_SAMPLE = {SampleStatus.READY_FOR_PICKUP: READY_FOR_PICKUP,
 # misma etapa para el paciente: la muestra está en el laboratorio central.
 SAMPLE_STAGE = {SampleStatus.READY_FOR_PICKUP.value: "ready_for_pickup", SampleStatus.WITH_TRANSPORTER.value: "to_lab",
                 SampleStatus.RECEIVED.value: "central_lab", SampleStatus.IN_SAMPLE_SET.value: "central_lab",
-                SampleStatus.IN_TRANSIT_TO_KOREA.value: "to_korea"}
+                SampleStatus.IN_TRANSIT_TO_SEQUENCING_LAB.value: "to_sequencing_lab"}
 
 
 def tracking_stage(
     study_status: StudyStatus | str, current_sample_status: str | None
 ) -> str:
-    """Etapa para el paciente. Después de Corea manda el estado del estudio (bioinformática, Camila)."""
+    """Etapa para el paciente. Después del viaje manda el estado del estudio (bioinformática, Camila)."""
     if study_status == RESULT_AVAILABLE_STATUS:
         return "result_available"
     if study_status in BIOINFORMATICS_STATUSES:

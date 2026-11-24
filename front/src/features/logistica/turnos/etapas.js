@@ -4,7 +4,7 @@ export const STAGES = [
   ['ready_for_pickup', 'Muestra lista para retirar', 'El centro tomó tu muestra y espera al transportista.'],
   ['to_lab', 'En camino al laboratorio', 'El transportista lleva tu muestra al laboratorio central.'],
   ['central_lab', 'En el laboratorio central', 'Tu muestra llegó y se prepara para el envío.'],
-  ['to_korea', 'En viaje al laboratorio de análisis', 'Tu muestra viaja al laboratorio que hace el análisis.'],
+  ['to_sequencing_lab', 'En viaje al laboratorio de análisis', 'Tu muestra viaja al laboratorio que hace el análisis.'],
   ['analysis', 'En análisis', 'Están analizando tu muestra.'],
   ['result_available', 'Resultado disponible', 'Ya está el resultado de tu estudio.'],
 ]

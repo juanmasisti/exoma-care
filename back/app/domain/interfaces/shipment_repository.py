@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class ShipmentRepository(Protocol):
+    """El envío vive en el lote (un paquete de FedEx por lote): lee y escribe sus datos de envío."""
+
+    # {id, status, closed_at, csv_path, authorization_pdf_path, pickup_at, courier_pickup_id, sample_ids}.
+    def get(self, sample_set_id: int) -> dict | None: ...
+    def closed_without_authorization(self) -> list[int]: ...
+    def commit(self) -> None: ...
+    def rollback(self) -> None: ...

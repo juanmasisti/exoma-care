@@ -319,7 +319,7 @@ bioinformática salen de sus constantes (`BIOINFORMATICS_STATUSES` y `RESULT_AVA
 | `ready_for_pickup` | Muestra lista para retirar | Muestra `ready_for_pickup` |
 | `to_lab` | En camino al laboratorio | Muestra `with_transporter` |
 | `central_lab` | En el laboratorio central | Muestra `received` o `in_sample_set` |
-| `to_korea` | En viaje al laboratorio de análisis | Muestra `in_transit_to_korea` |
+| `to_sequencing_lab` | En viaje al laboratorio de análisis | Muestra `in_transit_to_sequencing_lab` (antes `in_transit_to_korea`, decisión 016) |
 | `analysis` | En análisis | Estudio en un estado de bioinformática |
 | `result_available` | Resultado disponible | Estudio con el resultado disponible |
 | `resample` | Hay que repetir la extracción | Estudio `requiere_remuestreo` |
@@ -430,3 +430,59 @@ estudio queda en remuestreo y se manda el mail.
 
 Pruebas: `back/tests/test_demo_extraction_api.py` y `front/tests/simulador-bot.test.mjs`.
 Detalles en la [decisión 015](decisiones/015-simulador-bot.md).
+
+## Base de transporte, lotes y envío (T04-base)
+
+Deja lo común para hacer T04, T05 y T06 en paralelo, sin tocar archivos compartidos. Detalles en
+la [decisión 016](decisiones/016-logistica-base.md).
+
+- **Estados** (`back/app/domain/entities/logistics.py`): `DailyRouteStatus` (`pending` →
+  `arrived`), `SampleSetStatus` (`assembling` → `closed` → `awaiting_pickup` →
+  `in_transit_to_sequencing_lab`). El estado de muestra en viaje pasó a llamarse
+  `in_transit_to_sequencing_lab` (la migración 0018 renombra los datos) y la etapa del seguimiento
+  pasó a ser `to_sequencing_lab`.
+- **Reglas puras**: `next_stop_sequence`, `sample_set_must_close`, `is_urgent_pompe` (por el
+  código de patología `POMPE`) e `is_valid_pickup_time` (día hábil, de 9 a antes de las 18).
+- **Tablas** (migración `0018`): `daily_routes`, `route_stops`, `route_pickups`, `sample_sets`
+  (un solo lote `assembling` a la vez; el envío vive en el lote) y `sample_set_items` (slot 1 a 10).
+- **Repositorios**: `SampleRepository.change_status` (compartido), `RouteRepository` (T04),
+  `SampleSetRepository` (T05) y `ShipmentRepository` (T06).
+- **Enganches**: `get_sample_set_assigner` (en `routes/sample_sets.py`: la llegada llama al armado
+  de lotes) y `get_sample_set_closed_handler` (en `routes/shipments.py`: el cierre del lote llama a la
+  autorización). Por ahora no hacen nada. Cada uno vive junto al router de la tarea que lo implementa.
+  `TRANSPORT_ROLES` (`back/app/api/logistics_dependencies.py`) es provisorio: el administrativo hace de
+  transportista hasta que exista el rol `transporter`.
+- **Pantallas "En construcción"**: `/transporte/*`, `/administrativo/ordenes-del-dia`,
+  `/administrativo/lotes` y `/administrativo/lotes/:id`, con sus ítems en el menú del
+  administrativo.
+
+Muestras DEMO para probar cada tarea por separado: `python -m seeders logistics` (desde `back/`)
+también deja, para la paciente DEMO:
+
+| Grupo | Muestras | Para |
+| --- | --- | --- |
+| `lista` | 5 `ready_for_pickup`: 4 en tres centros DEMO de La Plata (Buenos Aires) y 1 en Córdoba | T04 |
+| `recibida` | 2 `received`, sin lote | T05 |
+| `lote-armando` | 9 `in_sample_set` en un lote `assembling` | T05 |
+| `lote-cerrado` | 10 `in_sample_set` en un lote `closed`, sin autorización | T06 |
+
+Cada muestra pasa por el flujo real: estudio pagado, turno de hace uno o dos meses, aviso de
+extracción con 4 ml y `change_status` paso a paso. Los eventos los firma la administrativa
+porque todavía no hay rol transportista. No se guardan recorridos ni retiros. Un grupo ya
+cargado no se repite, aunque sus muestras hayan avanzado después. Si un grupo quedó a medias, el
+seeder lo avisa y no lo completa. Si ya hay un lote armándose, no carga los grupos con lote.
+
+Pruebas: `back/tests/test_logistics_domain.py`, `back/tests/test_logistics_base.py`,
+`back/tests/test_logistics_seeder.py` y `front/tests/logistica-base.test.mjs`.
+
+## Orden del día y transportista (T04)
+
+Pendiente: la completa T04 (decisión 017).
+
+## Sample sets (T05)
+
+Pendiente: la completa T05 (decisión 018).
+
+## Envío internacional (T06)
+
+Pendiente: la completa T06 (decisión 019).

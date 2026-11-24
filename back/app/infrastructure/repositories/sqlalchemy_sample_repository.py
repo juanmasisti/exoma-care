@@ -92,6 +92,19 @@ class SQLAlchemySampleRepository:
         )
         return result.rowcount == 1
 
+    def change_status(self, sample_ids: list[int], from_status: str, to_status: str, at: datetime,
+                      actor_id: int | None = None) -> int:
+        changed = 0
+        for sample_id in sample_ids:
+            # Condicional, como `discard`: la que otro pedido ya movió no se pisa ni suma evento.
+            result = self.session.execute(update(SampleModel)
+                                          .where(SampleModel.id == sample_id, SampleModel.status == from_status)
+                                          .values(status=to_status))
+            if result.rowcount == 1:
+                self.add_event(sample_id, from_status, to_status, at, actor_id)
+                changed += 1
+        return changed
+
     def samples_with_events(self, study_id: int) -> list[dict]:
         samples = self.session.scalars(select(SampleModel).where(SampleModel.study_id == study_id)
                                        .order_by(SampleModel.id)).all()
