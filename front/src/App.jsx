@@ -13,6 +13,11 @@ import DiaExtraccion from './features/logistica/turnos/DiaExtraccion.jsx'
 import Seguimiento from './features/logistica/turnos/Seguimiento.jsx'
 import MisTurnos from './features/logistica/turnos/MisTurnos.jsx'
 import SimularAviso from './features/logistica/simulador/SimularAviso.jsx'
+import { TRANSPORT_ROLES } from './features/logistica/roles.js'
+import Transportista from './features/logistica/transportista/Transportista.jsx'
+import OrdenesDelDia from './features/logistica/transportista/OrdenesDelDia.jsx'
+import ListaLotes from './features/logistica/lotes/ListaLotes.jsx'
+import DetalleLote from './features/logistica/lotes/DetalleLote.jsx'
 import { Cupones, NuevaSolicitud, SolicitudDetalle, SolicitudesList } from './features/estudios/index.js'
 import { getSession, setSession, subscribeSession } from './services/session.js'
 
@@ -40,6 +45,10 @@ function App() {
     <Route path="/estudios/nuevo" element={roleRoute(['treating_physician'], <NuevaSolicitud session={session} />)} />
     <Route path="/estudios/:studyId" element={roleRoute(['treating_physician', 'lab_administrator', 'patient', 'super_admin'], <SolicitudDetalle key={session?.access_token} session={session} />)} />
     <Route path="/administrativo/simulador-bot" element={roleRoute(['lab_administrator'], <SimularAviso session={session} />)} />
+    <Route path="/administrativo/ordenes-del-dia" element={roleRoute(['lab_administrator'], <OrdenesDelDia session={session} />)} />
+    <Route path="/administrativo/lotes" element={roleRoute(['lab_administrator'], <ListaLotes session={session} />)} />
+    <Route path="/administrativo/lotes/:sampleSetId" element={roleRoute(['lab_administrator'], <DetalleLote session={session} />)} />
+    <Route path="/transporte/*" element={roleRoute(TRANSPORT_ROLES, <Transportista session={session} />)} />
     <Route path="/cupones" element={roleRoute(['medical_manager', 'treating_physician', 'patient', 'super_admin'], <Cupones session={session} />)} />
     <Route path="/catalogo/patologias" element={!session ? <Navigate to="/" replace /> : catalogAccess
       ? <PathologyCatalog session={session} /> : <Navigate to="/portal" replace />} />

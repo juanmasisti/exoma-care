@@ -1,7 +1,8 @@
-import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, FileText, FlaskConical, History, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, Stethoscope, Ticket, UserCog, Users } from 'lucide-react'
+import { Archive, BookOpen, CalendarCheck, CalendarClock, ChevronRight, ClipboardList, Dna, FileText, FlaskConical, History, LayoutDashboard, LogOut, MessageCircle, Package, Route as RouteIcon, ShieldCheck, Stethoscope, Ticket, Truck, UserCog, Users } from 'lucide-react'
 import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom'
 import { setSession } from '../../services/session.js'
 import { useSimulatorEnabled } from '../../features/logistica/simulador/api.js'
+import { TRANSPORT_ROLES } from '../../features/logistica/roles.js'
 import './ClinicalLayout.css'
 
 export default function ClinicalLayout({ session, children, pageLabel, bioinformaticsCounts = {} }) {
@@ -10,6 +11,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   const bioinformatician = session.role === 'bioinformatician'
   const superAdmin = session.role === 'super_admin'
   const labAdmin = session.role === 'lab_administrator'
+  const transporter = TRANSPORT_ROLES.includes(session.role)
   const physician = !patient && !manager && !bioinformatician && !superAdmin && !labAdmin
   const roleLabel = patient ? 'Paciente' : manager ? 'Gerente médico' : bioinformatician ? 'Bioinformático' : superAdmin ? 'Super Admin' : labAdmin ? 'Administrativo' : 'Médico tratante'
   const location = useLocation()
@@ -20,6 +22,11 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   const studiesArea = location.pathname.startsWith('/estudios')
   const couponsArea = location.pathname.startsWith('/cupones')
   const simulatorArea = location.pathname === '/administrativo/simulador-bot'
+  const transportArea = location.pathname.startsWith('/transporte')
+  const routesArea = location.pathname === '/administrativo/ordenes-del-dia'
+  const sampleSetsArea = location.pathname.startsWith('/administrativo/lotes')
+  const logisticsView = transportArea ? ['Recorrido del día', '/transporte'] : routesArea ? ['Órdenes del día', '/administrativo/ordenes-del-dia']
+    : sampleSetsArea ? ['Lotes', '/administrativo/lotes'] : null
   const simulatorEnabled = useSimulatorEnabled(labAdmin, session.access_token)
   const myAppointmentsArea = location.pathname === '/paciente/turnos' || location.pathname.startsWith('/paciente/estudios/')
   const bioSectionLabels = {
@@ -28,9 +35,9 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
     analisis: 'En análisis',
     historial: 'Historial',
   }
-  const viewLabel = simulatorArea ? 'Simular aviso del bot' : studiesArea ? (patient ? 'Mis estudios' : 'Solicitudes de estudio') : couponsArea ? (patient ? 'Mis cupones' : 'Cupones') : superAdmin ? 'Administración de usuarios' : patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
+  const viewLabel = logisticsView ? logisticsView[0] : simulatorArea ? 'Simular aviso del bot' : studiesArea ? (patient ? 'Mis estudios' : 'Solicitudes de estudio') : couponsArea ? (patient ? 'Mis cupones' : 'Cupones') : superAdmin ? 'Administración de usuarios' : patient ? (chatArea ? 'Consultas' : myAppointmentsArea ? 'Mis turnos' : 'Reservar turno') : bioinformatician ? bioSectionLabels[bioSection] || bioSectionLabels.inicio : patientsArea ? 'Pacientes' : manager ? 'Catálogo de patologías' : 'Validación clínica'
   const home = superAdmin ? '/super-admin/usuarios' : patient ? '/paciente/turnos/reservar' : bioinformatician ? '/bioinformatica/dashboard' : manager ? '/catalogo/patologias' : labAdmin ? '/estudios' : '/medico/pacientes'
-  const viewPath = simulatorArea ? '/administrativo/simulador-bot' : studiesArea ? '/estudios' : couponsArea ? '/cupones' : superAdmin
+  const viewPath = logisticsView ? logisticsView[1] : simulatorArea ? '/administrativo/simulador-bot' : studiesArea ? '/estudios' : couponsArea ? '/cupones' : superAdmin
     ? home
     : patient
       ? (chatArea ? '/paciente/consultas' : myAppointmentsArea ? '/paciente/turnos' : home)
@@ -58,6 +65,15 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
         </NavLink>}
         {labAdmin && simulatorEnabled && <NavLink to="/administrativo/simulador-bot" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <FlaskConical size={19} aria-hidden="true" /><span><strong>Simular aviso del bot</strong><small>SIMULACIÓN para demo</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {labAdmin && <NavLink to="/administrativo/ordenes-del-dia" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <RouteIcon size={19} aria-hidden="true" /><span><strong>Órdenes del día</strong><small>Recorridos por provincia</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {labAdmin && <NavLink to="/administrativo/lotes" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <Package size={19} aria-hidden="true" /><span><strong>Lotes</strong><small>Armado y envío</small></span><ChevronRight size={15} aria-hidden="true" />
+        </NavLink>}
+        {transporter && <NavLink to="/transporte" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+          <Truck size={19} aria-hidden="true" /><span><strong>Recorrido del día</strong><small>PROVISORIO: retiros y llegada</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
         {patient && <NavLink to="/paciente/consultas" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <MessageCircle size={19} aria-hidden="true" /><span><strong>Consultas</strong><small>Estudios genéticos y patologías</small></span><ChevronRight size={15} aria-hidden="true" />

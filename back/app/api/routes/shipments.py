@@ -4,17 +4,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AwareDatetime, BaseModel
 
-from app.api.catalog_dependencies import require_roles
+from app.api.logistics_dependencies import lab_administrator
 from app.api.routes.extraction_centers import get_clock
 from app.config import get_settings
-from app.domain.entities.roles import UserRole
 from app.domain.entities.user import AuthenticatedUser
 from app.domain.interfaces.courier import Courier, CourierError, PickupStatus
 from app.infrastructure.adapters.fedex_client import FedExClient
 
 # PROVISORIO para la demo (decisión 012): en T06 se reemplaza por el flujo del lote.
 router = APIRouter(prefix="/api/shipments", tags=["envíos"])
-lab_administrator = require_roles(UserRole.LAB_ADMINISTRATOR)
 
 
 def get_courier() -> Courier:
