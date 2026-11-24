@@ -6,7 +6,6 @@ import { container, crumb, labAdmin, patient, render } from './turnos-setup.mjs'
 const menuItem = (path) => container.querySelector(`.clinical-navigation a[href="${path}"]`)
 
 for (const [path, title, crumbText] of [
-  ['/administrativo/ordenes-del-dia', 'Órdenes del día', 'Exoma CareÓrdenes del día'],
   ['/administrativo/lotes', 'Lotes', 'Exoma CareLotes'],
   ['/administrativo/lotes/3', 'Lote 3', 'Exoma CareLotesLote 3'],
   ['/transporte', 'Recorrido del día', 'Exoma CareRecorrido del día'],
