@@ -52,6 +52,12 @@ class StudyModel(Base):
     include_secondary_findings: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0"
     )
+    # Reanálisis (EC-14): estudio de origen cuyo exoma se vuelve a analizar.
+    original_study_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studies.id", name="fk_studies_original_study_id_studies"),
+        nullable=True,
+        index=True,
+    )
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     variantes_detectadas: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True
@@ -116,6 +122,8 @@ class StudyBudgetModel(Base):
     coverage_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     insurer_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     patient_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Descuento del reanálisis (EC-14); total_cents ya lo tiene descontado.
+    discount_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class CoverageRequestModel(Base):
