@@ -69,9 +69,12 @@ usa el cliente de recorridos de la [decisión 009](009-cliente-recorridos.md).
 ## Qué quedó pendiente
 
 - **Rol `transporter` con provincia** (Camila, EC-03). Hoy `my-route` recibe `province_id` en el pedido y
-  la pantalla lo pide en un select PROVISORIO. `daily_routes.transporter_id` queda nulo. Cuando exista el
-  rol:
-  - sacar `province_id` del pedido y tomarlo del usuario;
+  la pantalla lo pide en un select PROVISORIO. Las opciones salen de las órdenes de hoy
+  (`GET /api/transport/daily-routes`), no de `GET /api/provinces`: ese endpoint es del turnero y solo
+  acepta pacientes, y con el administrativo respondía 403. `daily_routes.transporter_id` queda nulo.
+  Cuando exista el rol:
+  - sacar `province_id` del pedido y tomarlo del usuario, junto con el select (`daily-routes` es solo del
+    administrativo);
   - asignar el transportista al generar la orden;
   - probar el criterio de aceptación "un transportista no ve ni opera la orden de otra provincia
     (403/404)". **Hoy no se puede probar.**

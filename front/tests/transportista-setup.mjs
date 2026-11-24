@@ -14,7 +14,6 @@ export const fake = {}
 export const MONDAY_9 = new Date('2026-11-02T09:00:00-03:00').getTime()
 export const labAdmin = { access_token: 'test-token', role: 'lab_administrator', rol: 'Administrativo' }
 export const patient = { ...labAdmin, role: 'patient', rol: 'Paciente' }
-export const provinces = [{ id: 1, name: 'Buenos Aires', active_centers: 3 }, { id: 2, name: 'Córdoba', active_centers: 1 }]
 
 const center = (id, number) => ({ id, name: `Centro DEMO ${number}`, address: `Calle DEMO ${number}`, city: 'La Plata' })
 // Orden de Buenos Aires como la devuelve el back: paradas en la secuencia de la API de recorridos.
@@ -82,7 +81,8 @@ beforeEach(() => {
     if (fake.networkDown) throw new AxiosError('Network Error', 'ERR_NETWORK', config)
     const url = config.url
     if (url.startsWith('/demo/')) throw failure(config, 404, 'Not Found')
-    if (url === '/provinces') return ok(config, provinces)
+    // Como el back: /provinces es del turnero y solo lo puede usar el paciente.
+    if (url === '/provinces') throw failure(config, 403, 'Tu rol no permite esta operación.')
     if (url === '/transport/daily-routes' && config.method === 'get') return ok(config, fake.routes[config.params.date] ?? [])
     if (url === '/transport/daily-routes' && config.method === 'post') {
       if (fake.generateError) throw failure(config, fake.generateError[0], fake.generateError[1])

@@ -3,9 +3,8 @@ import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { Truck } from 'lucide-react'
 import ClinicalLayout from '../../../components/layout/ClinicalLayout.jsx'
 import { errorMessage } from '../../../services/api.js'
-import { listProvinces } from '../turnos/api.js'
 import { dateLabel, timeLabel } from '../turnos/fecha.js'
-import { getMyRoute, pickUp, registerArrival, today } from './api.js'
+import { getMyRoute, listDailyRoutes, pickUp, registerArrival, today } from './api.js'
 import '../turnos/turnos.css'
 import './transportista.css'
 
@@ -61,12 +60,14 @@ const samples = (n) => count(n, 'muestra', 'muestras')
 function Inicio({ date, provinceId, onProvince, route, error }) {
   const [provinces, setProvinces] = useState(null)
   const [provincesError, setProvincesError] = useState('')
+  // Las provincias salen de las órdenes de hoy: /provinces es del turnero y solo lo usa el paciente.
   useEffect(() => {
     let active = true
-    listProvinces().then((data) => { if (active) setProvinces(data) })
-      .catch((failure) => { if (active) setProvincesError(errorMessage(failure)) })
+    listDailyRoutes(date).then((routes) => {
+      if (active) setProvinces(routes.map((item) => ({ id: item.province_id, name: item.province })))
+    }).catch((failure) => { if (active) setProvincesError(errorMessage(failure)) })
     return () => { active = false }
-  }, [])
+  }, [date])
 
   const next = route && nextStop(route)
   return <>
@@ -74,6 +75,7 @@ function Inicio({ date, provinceId, onProvince, route, error }) {
     <div className="turnos-card transporte-block">
       <label htmlFor="transporte-province">Provincia (PROVISORIO: después sale de tu usuario)</label>
       {provincesError ? <p role="alert" className="turnos-error">{provincesError}</p>
+        : provinces?.length === 0 ? <p className="turnos-empty">Hoy no hay órdenes del día generadas.</p>
         : <select id="transporte-province" value={provinceId} onChange={(event) => onProvince(event.target.value)} disabled={!provinces}>
           <option value="">{provinces ? 'Elegí tu provincia' : 'Cargando provincias...'}</option>
           {provinces?.map((province) => <option key={province.id} value={province.id}>{province.name}</option>)}
