@@ -1,4 +1,5 @@
 // Base de transporte, lotes y envío (decisión 016): rutas, menú y pantallas "En construcción".
+// Las pantallas de lotes ya las prueba lotes.test.mjs (T05).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { container, crumb, labAdmin, patient, render } from './turnos-setup.mjs'
@@ -7,8 +8,6 @@ const menuItem = (path) => container.querySelector(`.clinical-navigation a[href=
 
 for (const [path, title, crumbText] of [
   ['/administrativo/ordenes-del-dia', 'Órdenes del día', 'Exoma CareÓrdenes del día'],
-  ['/administrativo/lotes', 'Lotes', 'Exoma CareLotes'],
-  ['/administrativo/lotes/3', 'Lote 3', 'Exoma CareLotesLote 3'],
   ['/transporte', 'Recorrido del día', 'Exoma CareRecorrido del día'],
 ]) {
   test(`${path} está en construcción para el administrativo`, async () => {
@@ -18,11 +17,6 @@ for (const [path, title, crumbText] of [
     assert.equal(crumb(), crumbText)
   })
 }
-
-test('el detalle del lote ya muestra el lugar del envío', async () => {
-  await render('/administrativo/lotes/3', labAdmin)
-  assert.match(container.querySelector('section[aria-label="Envío del lote"]').textContent, /Envío.*En construcción/)
-})
 
 test('el administrativo ve órdenes, lotes y el recorrido (provisorio) en el menú', async () => {
   await render('/administrativo/lotes', labAdmin)
