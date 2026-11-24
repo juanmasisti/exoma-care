@@ -14,6 +14,7 @@ from study_request_fakes import (
 )
 
 from app.domain.entities.roles import UserRole
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.user import AuthenticatedUser
 from app.infrastructure.external_services.errors import ExternalServiceError
 from app.use_cases.coupons import CouponService
@@ -41,8 +42,26 @@ OTHER_PATIENT_USER = user(41, UserRole.PATIENT)
 BIO = user(50, UserRole.BIOINFORMATICIAN)
 
 
+class FakeNotifier:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int, StudyStatus]] = []
+        self.fail = False
+
+    async def _record(self, event, study):
+        self.calls.append((event, study.id, study.status))
+        if self.fail:
+            raise RuntimeError("servicio de avisos caído")
+
+    async def reanalisis_solicitado(self, study):
+        await self._record("reanalisis_solicitado", study)
+
+    async def estudio_habilitado(self, study):
+        await self._record("estudio_habilitado", study)
+
+
 class World:
     def __init__(self) -> None:
+        self.notifier = FakeNotifier()
         self.repo = InMemoryStudyRequestRepository()
         self.repo.add_physician(PHYSICIAN.id)
         self.repo.add_physician(OTHER_PHYSICIAN.id)
@@ -51,8 +70,10 @@ class World:
         self.genes = FakeGeneCatalog()
         self.insurance = FakeInsurance()
         self.gateway = FakeCoupons()
-        self.requests = StudyRequestService(self.repo, self.genes)
-        self.payments = StudyPaymentService(self.repo, self.insurance, self.gateway)
+        self.requests = StudyRequestService(self.repo, self.genes, self.notifier)
+        self.payments = StudyPaymentService(
+            self.repo, self.insurance, self.gateway, notifier=self.notifier
+        )
         self.coupons = CouponService(self.repo, self.gateway, "G-TEST")
 
     def study(self, codes=("FABRY",), extra=(), patient_id=1, physician=PHYSICIAN):
@@ -155,9 +176,10 @@ def test_secondary_findings_flag_is_stored(w):
 
 def test_read_permissions_by_role(w):
     study_id = w.study()["id"]
-    for allowed in (PHYSICIAN, ADMIN, PATIENT_USER, user(1, UserRole.SUPER_ADMIN)):
+    # Bioinformática lee cualquier estudio: abre el estudio de origen de un reanálisis (EC-14).
+    for allowed in (PHYSICIAN, ADMIN, PATIENT_USER, BIO, user(1, UserRole.SUPER_ADMIN)):
         assert w.requests.obtener(study_id, allowed)["id"] == study_id
-    for denied in (OTHER_PHYSICIAN, OTHER_PATIENT_USER, MANAGER, BIO):
+    for denied in (OTHER_PHYSICIAN, OTHER_PATIENT_USER, MANAGER):
         with pytest.raises(PermissionError):
             w.requests.obtener(study_id, denied)
 
@@ -619,3 +641,202 @@ def test_coupon_listing_is_scoped_by_role(w):
 def test_empty_gerente_id_is_rejected(w):
     with pytest.raises(ValueError):
         CouponService(w.repo, w.gateway, "  ")
+
+
+# ---------- Aviso al habilitarse un estudio nuevo ----------
+
+
+def test_paying_a_new_study_notifies_once_and_keeps_paid_status(w):
+    study_id = w.budgeted()
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "particular"))
+    run(w.payments.pagar(study_id, PATIENT_USER))
+    assert w.status(study_id) == StudyStatus.PAID
+    assert w.notifier.calls == [("estudio_habilitado", study_id, StudyStatus.PAID)]
+
+
+def test_partial_coverage_does_not_notify_until_the_patient_pays(w):
+    study_id = w.budgeted()
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "obra_social", "os-1"))
+    run(w.payments.autorizar_cobertura(study_id, ADMIN))
+    assert w.status(study_id) == StudyStatus.PENDING_PAYMENT
+    assert w.notifier.calls == []
+    run(w.payments.pagar(study_id, PATIENT_USER))
+    assert w.notifier.calls == [("estudio_habilitado", study_id, StudyStatus.AUTHORIZED)]
+
+
+def test_a_failing_notification_never_undoes_the_payment(w):
+    study_id = w.budgeted()
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "particular"))
+    w.notifier.fail = True
+    detail = run(w.payments.pagar(study_id, PATIENT_USER))
+    assert detail["status"] == StudyStatus.PAID
+    assert w.repo.committed()["studies"][study_id]["status"] == StudyStatus.PAID
+
+
+# ---------- EC-14: reanálisis ----------
+
+
+def finished(w, **kwargs):
+    """Estudio con resultado disponible (el resultado lo carga bioinformática)."""
+    study_id = w.study(**kwargs)["id"]
+    w.repo.set_study(study_id, status=StudyStatus.RESULT_AVAILABLE)
+    return study_id
+
+
+def reanalysis(w, origin_id, codes=(), extra=("EXTRA1",), actor=PHYSICIAN, secondary=False):
+    return run(
+        w.requests.solicitar_reanalisis(
+            origin_id,
+            actor,
+            pathology_codes=codes,
+            additional_genes=extra,
+            include_secondary_findings=secondary,
+        )
+    )
+
+
+def test_reanalysis_needs_a_study_with_result(w):
+    origin_id = w.study()["id"]
+    with pytest.raises(StudyRequestConflictError, match="resultado disponible"):
+        reanalysis(w, origin_id)
+    assert len(w.repo.s["studies"]) == 1
+
+
+def test_reanalysis_is_a_new_study_linked_to_its_origin(w):
+    origin_id = finished(w)
+    detail = reanalysis(w, origin_id, extra=("EXTRA1",), secondary=True)
+    assert detail["id"] != origin_id
+    assert detail["original_study_id"] == origin_id
+    assert detail["is_reanalysis"] is True
+    assert detail["patient_id"] == 1
+    assert detail["physician_id"] == PHYSICIAN.id
+    assert detail["status"] == StudyStatus.CREATED
+    assert detail["include_secondary_findings"] is True
+    assert [g["symbol"] for g in detail["genes"]] == ["EXTRA1"]
+    assert w.status(origin_id) == StudyStatus.RESULT_AVAILABLE
+    origin = w.requests.obtener(origin_id, PHYSICIAN)
+    assert [item["id"] for item in origin["reanalyses"]] == [detail["id"]]
+    assert w.notifier.calls == [("reanalisis_solicitado", detail["id"], StudyStatus.CREATED)]
+
+
+def test_reanalysis_skips_genes_already_analyzed_from_the_pathologies(w):
+    origin_id = finished(w, codes=("TEST-A",))  # GENA1, GENA2, SHARED1
+    detail = reanalysis(w, origin_id, codes=("TEST-B",), extra=())  # GENB1, SHARED1
+    assert [(g["symbol"], g["origin"]) for g in detail["genes"]] == [("GENB1", "catalogo")]
+    assert [p["code"] for p in detail["pathologies"]] == ["TEST-B"]
+
+
+def test_reanalysis_rejects_a_gene_already_analyzed_in_the_exome(w):
+    origin_id = finished(w, codes=("FABRY",))
+    with pytest.raises(ValueError, match="GLA"):
+        reanalysis(w, origin_id, extra=("gla", "EXTRA1"))
+    with pytest.raises(ValueError, match="ya se analizaron"):
+        reanalysis(w, origin_id, codes=("FABRY",), extra=())
+    assert len(w.repo.s["studies"]) == 1
+
+
+def test_reanalysis_of_a_reanalysis_excludes_genes_of_the_whole_chain(w):
+    origin_id = finished(w, codes=("FABRY",))
+    first = reanalysis(w, origin_id, extra=("EXTRA1",))["id"]
+    w.repo.set_study(first, status=StudyStatus.RESULT_AVAILABLE)
+    with pytest.raises(ValueError, match="GLA"):
+        reanalysis(w, first, extra=("GLA",))
+    second = reanalysis(w, first, extra=("EXTRA2",))
+    assert second["original_study_id"] == first
+    assert w.requests.obtener(first, PHYSICIAN)["analyzed_genes"] == ["EXTRA1", "GLA"]
+
+
+def test_only_the_studys_physician_can_request_a_reanalysis(w):
+    origin_id = finished(w)
+    for actor in (OTHER_PHYSICIAN, ADMIN, PATIENT_USER, BIO):
+        with pytest.raises(PermissionError):
+            reanalysis(w, origin_id, actor=actor)
+
+
+def test_study_without_requesting_physician_uses_the_patients_physician(w):
+    w.repo.add_patient(3, "Paciente Histórico", None, created_by_physician_id=OTHER_PHYSICIAN.id)
+    origin_id = finished(w, patient_id=3)
+    w.repo.set_study(origin_id, physician_id=None)
+    with pytest.raises(PermissionError):
+        reanalysis(w, origin_id, actor=PHYSICIAN)
+    detail = reanalysis(w, origin_id, actor=OTHER_PHYSICIAN)
+    assert detail["physician_id"] == OTHER_PHYSICIAN.id
+
+
+@pytest.mark.parametrize(
+    ("extra", "gross", "discount"),
+    [
+        (("EXTRA1",), 50000, 15000),  # 1 gen: USD 500 - 30 % = USD 350
+        (("EXTRA1", "EXTRA2", "EXTRA3", "EXTRA4", "EXTRA5", "EXTRA6"), 53000, 15900),  # 6 genes
+    ],
+)
+def test_reanalysis_budget_has_a_30_percent_discount(w, extra, gross, discount):
+    origin_id = finished(w)
+    detail = reanalysis(w, origin_id, extra=extra)
+    assert detail["estimated_budget"]["total_cents"] == gross - discount
+    assert detail["estimated_budget"]["discount_cents"] == discount
+    budget = w.requests.emitir_presupuesto(detail["id"], ADMIN)
+    assert budget["base_cents"] + budget["extra_cents"] == gross
+    assert budget["discount_cents"] == discount
+    assert budget["discount_percent"] == 30
+    assert budget["total_cents"] == gross - discount
+
+
+def test_new_studies_have_no_discount(w):
+    budget = w.requests.emitir_presupuesto(w.study()["id"], ADMIN)
+    assert (budget["discount_cents"], budget["discount_percent"]) == (0, None)
+
+
+def reanalysis_with_budget(w, extra=("EXTRA1",)):
+    study_id = reanalysis(w, finished(w), extra=extra)["id"]
+    w.requests.emitir_presupuesto(study_id, ADMIN)
+    w.notifier.calls.clear()
+    return study_id
+
+
+def test_paid_reanalysis_goes_straight_to_bioinformatics(w):
+    study_id = reanalysis_with_budget(w)
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "particular"))
+    detail = run(w.payments.pagar(study_id, PATIENT_USER))
+    assert detail["status"] == StudyStatus.IN_BIOINFORMATICS
+    assert detail["operations"][0]["amount_cents"] == 35000
+    assert w.notifier.calls == [("estudio_habilitado", study_id, StudyStatus.IN_BIOINFORMATICS)]
+
+
+def test_coupons_do_not_apply_to_reanalysis(w):
+    study_id = reanalysis_with_budget(w)
+    code = w.coupon_for_patient()
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "particular"))
+    with pytest.raises(ValueError, match="reanálisis"):
+        run(w.payments.pagar(study_id, PATIENT_USER, code))
+    assert w.status(study_id) == StudyStatus.PENDING_PAYMENT
+    assert w.repo.get_coupon(code).status == "paciente"
+    assert not [c for c in w.gateway.calls if c[0] == "canjear"]
+
+
+def test_full_coverage_reanalysis_goes_straight_to_bioinformatics(w):
+    study_id = reanalysis_with_budget(w)
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "obra_social", "os-2"))
+    detail = run(w.payments.autorizar_cobertura(study_id, ADMIN))
+    assert detail["status"] == StudyStatus.IN_BIOINFORMATICS
+    assert w.notifier.calls == [("estudio_habilitado", study_id, StudyStatus.IN_BIOINFORMATICS)]
+
+
+def test_partial_coverage_reanalysis_applies_discount_before_coverage(w):
+    study_id = reanalysis_with_budget(w)
+    run(w.payments.elegir_modalidad(study_id, PATIENT_USER, "obra_social", "os-1"))
+    detail = run(w.payments.autorizar_cobertura(study_id, ADMIN))
+    # USD 350 con descuento; la obra social cubre el 40 %: 140 y el paciente paga 210.
+    assert detail["budget"]["split"] == {
+        "insurer_cents": 14000, "patient_cents": 21000, "estimated": False,
+    }
+    assert detail["status"] == StudyStatus.PENDING_PAYMENT
+    detail = run(w.payments.pagar(study_id, PATIENT_USER))
+    assert detail["status"] == StudyStatus.IN_BIOINFORMATICS
+
+
+def test_bioinformatics_can_open_the_origin_of_a_reanalysis(w):
+    origin_id = finished(w)
+    study_id = reanalysis(w, origin_id)["id"]
+    assert w.requests.obtener(study_id, BIO)["original_study_id"] == origin_id
+    assert w.requests.obtener(origin_id, BIO)["id"] == origin_id

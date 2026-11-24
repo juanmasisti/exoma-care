@@ -33,6 +33,11 @@ export function downloadStudyResultSvg(studyId) {
   return downloadStudyFile(studyId, 'svg', 'image/svg+xml')
 }
 
+// --- Reanálisis (EC-14): nuevo análisis del mismo exoma, vinculado al estudio de origen ---
+export async function requestReanalysis(studyId, payload) {
+  return (await api.post(`${BASE}/${studyId}/reanalisis`, payload)).data
+}
+
 // --- Presupuesto (EC-11) ---
 // Emitir devuelve solo el presupuesto: se vuelve a leer el estudio para que la pantalla reciba el detalle completo.
 export async function issueBudget(studyId) {

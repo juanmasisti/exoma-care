@@ -17,6 +17,7 @@ from app.api.study_dependencies import (
     get_study_request_service,
 )
 from app.domain.entities.roles import UserRole
+from app.domain.entities.study import StudyStatus
 from app.domain.entities.user import AuthenticatedUser
 from app.main import app
 from app.use_cases.coupons import CouponService
@@ -40,9 +41,13 @@ def as_user(name):
     return {"X-Test-User": name}
 
 
+client_repo: dict = {}
+
+
 @pytest.fixture
 def client():
     repo = InMemoryStudyRequestRepository()
+    client_repo["repo"] = repo
     repo.add_physician(10)
     repo.add_physician(11)
     repo.add_patient(1, "Paciente Demo", 40)
@@ -114,10 +119,11 @@ def test_read_access_is_limited_to_owners_and_staff(client):
     url = f"{BASE}/{study_id}"
     for role in ("physician", "admin", "patient"):
         assert client.get(url, headers=as_user(role)).status_code == 200
-    for role in ("other_physician", "other_patient"):
+    for role in ("other_physician", "other_patient", "manager"):
         assert client.get(url, headers=as_user(role)).status_code == 403
-    for role in ("manager", "bio"):
-        assert client.get(url, headers=as_user(role)).status_code == 403
+    # Bioinformática abre el detalle (estudio de origen de un reanálisis), pero no el listado.
+    assert client.get(url, headers=as_user("bio")).status_code == 200
+    assert client.get(BASE, headers=as_user("bio")).status_code == 403
     assert client.get(f"{BASE}/999", headers=as_user("admin")).status_code == 404
 
 
@@ -217,3 +223,37 @@ def test_coupon_endpoints_permissions_and_validation(client):
     assert client.post("/api/cupones/9999/asignar-medico", json={"medico_id": 10}, headers=manager).status_code == 404
     assert client.get("/api/cupones", params={"estado": "otro"}, headers=manager).status_code == 422
     assert client.get("/api/cupones", headers=as_user("admin")).status_code == 403
+
+
+# ---------- EC-14: reanálisis ----------
+
+
+def test_reanalysis_flow_skips_extraction_and_coupons(client):
+    origin_id = create_study(client)
+    client_repo["repo"].set_study(origin_id, status=StudyStatus.RESULT_AVAILABLE)
+    url = f"{BASE}/{origin_id}/reanalisis"
+    body = {"additional_genes": ["EXTRA1"], "include_secondary_findings": True}
+
+    for role in ("admin", "patient", "bio", "manager", "other_physician"):
+        assert client.post(url, json=body, headers=as_user(role)).status_code == 403
+    assert client.post(url, json={**body, "extra": 1}, headers=as_user("physician")).status_code == 422
+    assert client.post(url, json={"additional_genes": ["GLA"]}, headers=as_user("physician")).status_code == 422
+    assert client.post(f"{BASE}/999/reanalisis", json=body, headers=as_user("physician")).status_code == 404
+
+    created = client.post(url, json=body, headers=as_user("physician"))
+    assert created.status_code == 201, created.text
+    study = created.json()
+    assert (study["original_study_id"], study["is_reanalysis"]) == (origin_id, True)
+    assert client.post(f"{BASE}/{study['id']}/reanalisis", json=body, headers=as_user("physician")).status_code == 409
+
+    budget = client.post(f"{BASE}/{study['id']}/presupuesto", headers=as_user("admin")).json()
+    assert (budget["total_cents"], budget["discount_cents"]) == (35000, 15000)
+    patient = as_user("patient")
+    assert client.post(f"{BASE}/{study['id']}/modalidad-pago", json={"mode": "particular"}, headers=patient).status_code == 200
+    assert client.post(f"{BASE}/{study['id']}/pago", json={"coupon_code": "1000"}, headers=patient).status_code == 422
+    paid = client.post(f"{BASE}/{study['id']}/pago", headers=patient)
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["status"] == "en_area_bioinformatica"
+
+    origin = client.get(f"{BASE}/{origin_id}", headers=as_user("bio")).json()
+    assert [item["id"] for item in origin["reanalyses"]] == [study["id"]]

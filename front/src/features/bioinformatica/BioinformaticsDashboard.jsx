@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Activity, AlertCircle, CalendarDays, CheckCircle2, ClipboardList, Dna, History, Mail, RefreshCw, Search, UserRound } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import ClinicalLayout from '../../components/layout/ClinicalLayout.jsx'
 import PatologiaSelect from './components/PatologiaSelect.jsx'
 import { api, errorMessage } from '../../services/api.js'
@@ -102,6 +102,11 @@ function StudyResult({ study }) {
   </div>
 }
 
+// EC-14: un reanálisis usa el mismo exoma; el estudio de origen tiene el resultado previo.
+function ReanalysisOrigin({ studyId }) {
+  return <span>Reanálisis del exoma del estudio <Link to={`/estudios/${studyId}`}>#{studyId}</Link> (sin muestra nueva)</span>
+}
+
 function StudyCard({ study, onSelect, actionLabel, disabled, statusLabel, onResendNotification, resending }) {
   return <article className="bioinformatics-study-card">
     <div className="bioinformatics-study-card-main">
@@ -117,6 +122,7 @@ function StudyCard({ study, onSelect, actionLabel, disabled, statusLabel, onRese
       {study.analyst_id && <span>Bioinformático asignado: #{study.analyst_id}</span>}
       {study.codigo_patologia && <span>Patología: {study.codigo_patologia}</span>}
       {studyGenes(study).length > 0 && <span>Genes solicitados: {studyGenes(study).join(', ')}</span>}
+      {study.original_study_id && <ReanalysisOrigin studyId={study.original_study_id} />}
     </div>
     {study.patient && <details className="bioinformatics-details">
       <summary><UserRound size={15} aria-hidden="true" /> Datos del paciente</summary>
@@ -426,7 +432,8 @@ export default function BioinformaticsDashboard({ session }) {
             />)}</div>}
         {section === 'analisis' && selectedStudy && <section className="bioinformatics-section bioinformatics-analysis-panel">
           <div className="bioinformatics-section-heading">
-            <div><h2>Completar estudio #{selectedStudy.id}</h2><p>{selectedStudy.patient_name} · DNI {selectedStudy.patient_dni}</p></div>
+            <div><h2>Completar estudio #{selectedStudy.id}</h2><p>{selectedStudy.patient_name} · DNI {selectedStudy.patient_dni}</p>
+              {selectedStudy.original_study_id && <p><ReanalysisOrigin studyId={selectedStudy.original_study_id} /></p>}</div>
           </div>
           <PatientDetails patient={selectedStudy.patient} />
           <form className="bioinformatics-search-form" onSubmit={searchVariants}>

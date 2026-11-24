@@ -1,4 +1,5 @@
-"""Solicitud de estudio, presupuesto, modalidad de pago, cobertura y pago (EC-10 a EC-13)."""
+"""Solicitud de estudio, presupuesto, modalidad de pago, cobertura, pago (EC-10 a EC-13) y
+reanálisis (EC-14)."""
 
 from typing import Any, Literal
 
@@ -22,6 +23,14 @@ reader_roles = require_roles(
     UserRole.PATIENT,
     UserRole.SUPER_ADMIN,
 )
+# El detalle también lo ve bioinformática: necesita abrir el estudio de origen de un reanálisis.
+detail_roles = require_roles(
+    UserRole.TREATING_PHYSICIAN,
+    UserRole.LAB_ADMINISTRATOR,
+    UserRole.PATIENT,
+    UserRole.BIOINFORMATICIAN,
+    UserRole.SUPER_ADMIN,
+)
 admin_roles = require_roles(UserRole.LAB_ADMINISTRATOR, UserRole.SUPER_ADMIN)
 patient_roles = require_roles(UserRole.PATIENT)
 insurer_list_roles = require_roles(UserRole.PATIENT, UserRole.LAB_ADMINISTRATOR, UserRole.SUPER_ADMIN)
@@ -33,6 +42,15 @@ class CreateStudyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     patient_id: PositiveInt
     pathology_codes: list[str] = Field(min_length=1, max_length=20)
+    additional_genes: list[str] = Field(default_factory=list, max_length=200)
+    include_secondary_findings: bool = False
+
+
+class CreateReanalysisRequest(BaseModel):
+    """Las patologías son opcionales: el médico puede pedir solo genes puntuales."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    pathology_codes: list[str] = Field(default_factory=list, max_length=20)
     additional_genes: list[str] = Field(default_factory=list, max_length=200)
     include_secondary_findings: bool = False
 
@@ -131,11 +149,33 @@ def list_study_requests(
 @router.get("/{study_id}")
 def get_study_request(
     study_id: PositiveInt,
-    actor: AuthenticatedUser = Depends(reader_roles),
+    actor: AuthenticatedUser = Depends(detail_roles),
     service: StudyRequestService = Depends(get_study_request_service),
 ) -> dict[str, Any]:
     try:
         return service.obtener(study_id, actor)
+    except HANDLED_ERRORS as exc:
+        raise to_http_error(exc) from exc
+
+
+# --- EC-14: reanálisis ---
+
+
+@router.post("/{study_id}/reanalisis", status_code=201)
+async def request_reanalysis(
+    study_id: PositiveInt,
+    body: CreateReanalysisRequest,
+    actor: AuthenticatedUser = Depends(physician_roles),
+    service: StudyRequestService = Depends(get_study_request_service),
+) -> dict[str, Any]:
+    try:
+        return await service.solicitar_reanalisis(
+            study_id,
+            actor,
+            pathology_codes=body.pathology_codes,
+            additional_genes=body.additional_genes,
+            include_secondary_findings=body.include_secondary_findings,
+        )
     except HANDLED_ERRORS as exc:
         raise to_http_error(exc) from exc
 

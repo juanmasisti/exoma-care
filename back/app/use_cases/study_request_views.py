@@ -2,7 +2,13 @@
 
 from typing import Any
 
-from app.domain.entities.budget import calculate_budget, split_amounts, to_cents
+from app.domain.entities.budget import (
+    REANALYSIS_DISCOUNT_PERCENT,
+    calculate_budget,
+    reanalysis_discount_cents,
+    split_amounts,
+    to_cents,
+)
 from app.domain.entities.roles import UserRole
 from app.domain.entities.study_request import CoverageRequest, StudyBudget, StudyRequest
 from app.domain.entities.user import AuthenticatedUser
@@ -14,8 +20,13 @@ NO_ACCESS_MESSAGE = "No tenés acceso a este estudio."
 def ensure_can_view(
     repo: StudyRequestRepository, study: StudyRequest, actor: AuthenticatedUser
 ) -> None:
-    """Administrativo y super admin ven todo; el médico, sus estudios; el paciente, los suyos."""
-    if actor.role in (UserRole.LAB_ADMINISTRATOR, UserRole.SUPER_ADMIN):
+    """Administrativo, super admin y bioinformática ven todo (bioinformática necesita abrir el
+    estudio de origen de un reanálisis); el médico, sus estudios; el paciente, los suyos."""
+    if actor.role in (
+        UserRole.LAB_ADMINISTRATOR,
+        UserRole.SUPER_ADMIN,
+        UserRole.BIOINFORMATICIAN,
+    ):
         return
     if actor.role is UserRole.TREATING_PHYSICIAN and study.physician_id == actor.id:
         return
@@ -89,6 +100,8 @@ def budget_to_dict(
         "extra_genes": budget.extra_genes,
         "extra_cents": budget.extra_cents,
         "total_cents": budget.total_cents,
+        "discount_cents": budget.discount_cents,
+        "discount_percent": REANALYSIS_DISCOUNT_PERCENT if budget.discount_cents else None,
         "issued_by_user_id": budget.issued_by_user_id,
         "issued_at": budget.issued_at,
         "payment_mode": budget.payment_mode,
@@ -114,16 +127,35 @@ def study_summary(study: StudyRequest, patient_name: str | None = None) -> dict[
         "created_at": study.created_at,
         "pathologies": [{"code": p.code, "name": p.name} for p in study.pathologies],
         "gene_count": len(study.genes),
+        "original_study_id": study.original_study_id,
+        "is_reanalysis": study.is_reanalysis,
     }
+
+
+def analyzed_genes(repo: StudyRequestRepository, study: StudyRequest) -> list[str]:
+    """Genes ya analizados en el exoma: los del estudio y los de toda su cadena de origen."""
+    genes: dict[str, None] = {}
+    seen: set[int] = set()
+    current: StudyRequest | None = study
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        for gene in current.genes:
+            genes.setdefault(gene.symbol, None)
+        parent = current.original_study_id
+        current = repo.get_study(parent) if parent is not None else None
+    return list(genes)
 
 
 def study_detail(repo: StudyRequestRepository, study: StudyRequest) -> dict[str, Any]:
     estimate = None
     if study.genes:
         priced = calculate_budget(gene.symbol for gene in study.genes)
+        gross = to_cents(priced.total)
+        discount = reanalysis_discount_cents(gross) if study.is_reanalysis else 0
         estimate = {
             "gene_count": priced.gene_count,
-            "total_cents": to_cents(priced.total),
+            "total_cents": gross - discount,
+            "discount_cents": discount,
             "currency": priced.currency,
         }
     budget = repo.get_budget(study.id)
@@ -136,4 +168,10 @@ def study_detail(repo: StudyRequestRepository, study: StudyRequest) -> dict[str,
         "budget": budget_to_dict(budget, coverage) if budget is not None else None,
         "coverage": coverage_to_dict(coverage) if coverage is not None else None,
         "operations": repo.list_operations(study.id),
+        # EC-14: reanálisis pedidos sobre este estudio y genes ya analizados en el exoma.
+        "reanalyses": [
+            {"id": item.id, "status": item.status, "created_at": item.created_at}
+            for item in repo.list_reanalyses(study.id)
+        ],
+        "analyzed_genes": analyzed_genes(repo, study),
     }
