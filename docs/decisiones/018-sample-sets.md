@@ -43,6 +43,19 @@ Fecha: 23/11/2026. Área de logística (Ivo). Se apoya en la base de la
   - lote abierto a la vez por otro pedido (`AssemblingSetExists`): se relee y se usa ese;
   - con cinco relecturas seguidas (`MAX_ATTEMPTS`: lote abierto, lleno o cerrado por otro pedido) falla con
     `RuntimeError` y se deshace la llegada entera. Un lugar tomado no cuenta como intento.
+- **El repositorio de lotes no usa savepoints** (cambia lo que dice la 016). `session.py` no fuerza `BEGIN`, y
+  pysqlite abre la transacción recién con un INSERT/UPDATE/DELETE. Si `begin_nested()` era la primera escritura
+  del pedido, el `SAVEPOINT` abría la transacción y su `RELEASE` la confirmaba, así que el rollback del pedido no
+  deshacía el cierre, el lote abierto ni la muestra agregada. Ahora cada operación es una sola sentencia
+  condicional que se mira por filas afectadas:
+  - `close`: `UPDATE ... WHERE status = 'assembling'`, que sube la `version` a mano;
+  - `open_set`: `INSERT ... SELECT` si no hay un lote armándose (el índice único parcial queda de respaldo);
+  - `add_item`: `INSERT ... SELECT` si el lote sigue armándose y el lugar y la muestra están libres. Si no entra,
+    se lee el motivo: `SampleAlreadyInSet`, `SetNotAssembling` o `SlotTaken`.
+
+  Un choque no escribe nada ni rompe la transacción, así que no hace falta deshacer solo una parte. Una muestra
+  inexistente sigue dando `IntegrityError`. Ivo autorizó adaptar la prueba de la base que solo subía la `version`:
+  ahora el otro pedido cierra el lote.
 - **El aviso de cierre lo da quien gana el cierre.** `close` es condicional: si otro pedido ya cerró el lote,
   devuelve `False` y no se vuelve a avisar. Así `al_cerrar_lote` se llama una sola vez por lote.
 - **Errores del armado.** Una muestra que no está `received` da `ValueError`; una muestra o estudio inexistente
@@ -71,4 +84,7 @@ Fecha: 23/11/2026. Área de logística (Ivo). Se apoya en la base de la
   recarga falla, muestra el error sin borrar el lote ni desmontar el envío. Las pruebas de lotes no lo ejercen
   porque no miran `EnvioLote`: lo prueba T06 cuando lo implemente.
 - **Pompe no está en el seeder** (solo carga Fabry): se prueba en `back/tests/test_sample_sets_api.py`.
-- **Solo SQLite**, como dice la decisión 016.
+- **Solo SQLite**, como dice la decisión 016. En Postgres, dos aperturas a la vez pasarían el `NOT EXISTS` y
+  una chocaría con el índice único con `IntegrityError` (sin savepoint, deshace el pedido entero), y el alta tendría
+  que bloquear la fila del lote.
+- **`sqlalchemy_route_repository.py` (T04) usa el mismo savepoint** en `add_route`: avisarle a quien hace T04.

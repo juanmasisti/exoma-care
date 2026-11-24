@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, insert, literal, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, insert, literal, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import StaleDataError
 
 from app.domain.entities.logistics import SAMPLE_SET_SIZE, SampleSetStatus
 from app.domain.interfaces.sample_set_repository import (
@@ -14,6 +12,8 @@ from app.domain.interfaces.sample_set_repository import (
 from app.infrastructure.database.logistics_models import SampleModel, SampleSetItemModel, SampleSetModel
 from app.infrastructure.database.models import Paciente
 from app.infrastructure.database.study_models import StudyModel, StudyPathologyModel
+
+ASSEMBLING = SampleSetStatus.ASSEMBLING.value
 
 
 class SQLAlchemySampleSetRepository:
@@ -36,60 +36,59 @@ class SQLAlchemySampleSetRepository:
 
     def assembling(self) -> dict | None:
         sample_set = self.session.scalar(select(SampleSetModel)
-                                         .where(SampleSetModel.status == SampleSetStatus.ASSEMBLING.value))
+                                         .where(SampleSetModel.status == ASSEMBLING))
         return self._record(sample_set) if sample_set is not None else None
 
+    # Sin savepoints: pysqlite abre la transacción recién con un INSERT/UPDATE/DELETE, así que un SAVEPOINT como
+    # primera escritura la confirmaba al soltarse y el rollback del pedido ya no lo deshacía (decisión 018). Cada
+    # operación es una sola sentencia condicional: un choque no inserta ni cambia filas, y no rompe la transacción.
+
     def open_set(self, is_urgent: bool, now: datetime) -> int:
-        sample_set = SampleSetModel(status=SampleSetStatus.ASSEMBLING.value, is_urgent=is_urgent, created_at=now)
-        try:
-            # Savepoint: el choque deshace solo este lote, no las muestras recibidas del mismo pedido.
-            with self.session.begin_nested():
-                self.session.add(sample_set)
-                self.session.flush()
-        except IntegrityError:
-            raise AssemblingSetExists() from None
-        return sample_set.id
+        table = SampleSetModel.__table__
+        no_assembling = ~select(SampleSetModel.id).where(SampleSetModel.status == ASSEMBLING).exists()
+        row = select(literal(ASSEMBLING), literal(is_urgent, table.c.is_urgent.type),
+                     literal(now, table.c.created_at.type), literal(1, table.c.version.type)).where(no_assembling)
+        # El índice único parcial queda de respaldo: con SQLite la sentencia se escribe entera, de a una.
+        columns = ["status", "is_urgent", "created_at", "version"]
+        sample_set_id = self.session.scalar(insert(table).from_select(columns, row).returning(table.c.id))
+        if sample_set_id is None:
+            raise AssemblingSetExists()
+        return sample_set_id
 
     def add_item(self, sample_set_id: int, sample_id: int, slot: int) -> None:
         if not 1 <= slot <= SAMPLE_SET_SIZE:
             raise SetFull()
-        # INSERT condicional: solo entra si el lote sigue armándose al escribir, así un cierre que ganó
-        # antes (por ejemplo un Pompe urgente) no deja sumar muestras a un lote cerrado.
-        assembling = (select(SampleSetModel.id).where(SampleSetModel.id == sample_set_id,
-                                                      SampleSetModel.status == SampleSetStatus.ASSEMBLING.value)
-                      .exists())
-        row = select(literal(sample_set_id), literal(sample_id), literal(slot)).where(assembling)
-        try:
-            with self.session.begin_nested():
-                result = self.session.execute(insert(SampleSetItemModel)
-                                              .from_select(["sample_set_id", "sample_id", "slot"], row))
-        except IntegrityError:
-            if self._exists(SampleSetItemModel.sample_id == sample_id):
-                raise SampleAlreadyInSet() from None
-            if self._exists(SampleSetItemModel.sample_set_id == sample_set_id, SampleSetItemModel.slot == slot):
-                raise SlotTaken() from None
-            raise  # otro error (lote o muestra inexistente): no es un choque de lugar
-        if result.rowcount == 0:
+        # Solo entra si el lote sigue armándose al escribir (un cierre que ganó antes, como un Pompe urgente, no
+        # deja sumar muestras) y si el lugar y la muestra están libres.
+        assembling = select(SampleSetModel.id).where(SampleSetModel.id == sample_set_id,
+                                                     SampleSetModel.status == ASSEMBLING).exists()
+        slot_taken = self._item(SampleSetItemModel.sample_set_id == sample_set_id, SampleSetItemModel.slot == slot)
+        sample_taken = self._item(SampleSetItemModel.sample_id == sample_id)
+        row = (select(literal(sample_set_id), literal(sample_id), literal(slot))
+               .where(assembling, ~slot_taken, ~sample_taken))
+        # Una muestra inexistente sigue dando IntegrityError (clave foránea): no es un choque de lugar.
+        columns = ["sample_set_id", "sample_id", "slot"]
+        result = self.session.execute(insert(SampleSetItemModel).from_select(columns, row))
+        if result.rowcount == 1:
+            return
+        if not self.session.scalar(select(assembling)):
             raise SetNotAssembling()
+        if self.session.scalar(select(sample_taken)):
+            raise SampleAlreadyInSet()
+        raise SlotTaken()
 
-    def _exists(self, *where) -> bool:
-        return self.session.scalar(select(select(SampleSetItemModel.id).where(*where).exists()))
+    def _item(self, *where):
+        return select(SampleSetItemModel.id).where(*where).exists()
 
     def close(self, sample_set_id: int, now: datetime, is_urgent: bool = False) -> bool:
-        sample_set = self.session.get(SampleSetModel, sample_set_id)
-        if sample_set is None or sample_set.status != SampleSetStatus.ASSEMBLING.value:
-            return False
-        try:
-            # Los cambios van dentro del savepoint: si otro pedido cerró el lote (otra `version`), se
-            # deshace solo esto y la sesión sigue usable para el resto del pedido.
-            with self.session.begin_nested():
-                sample_set.status = SampleSetStatus.CLOSED.value
-                sample_set.closed_at = now
-                sample_set.is_urgent = sample_set.is_urgent or is_urgent
-                self.session.flush()
-        except StaleDataError:
-            return False
-        return True
+        values = {"status": SampleSetStatus.CLOSED.value, "closed_at": now, "version": SampleSetModel.version + 1}
+        if is_urgent:
+            values["is_urgent"] = True
+        # Condicional: solo cierra un lote que sigue armándose. "fetch" actualiza el lote si ya estaba en la sesión.
+        result = self.session.execute(update(SampleSetModel)
+                                      .where(SampleSetModel.id == sample_set_id, SampleSetModel.status == ASSEMBLING)
+                                      .values(**values).execution_options(synchronize_session="fetch"))
+        return result.rowcount == 1
 
     def study_for_sample(self, sample_id: int) -> int | None:
         return self.session.scalar(select(SampleModel.study_id).where(SampleModel.id == sample_id))

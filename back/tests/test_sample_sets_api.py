@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_database_session
 from app.api.routes.sample_sets import get_sample_set_assigner
 from app.api.routes.shipments import get_sample_set_closed_handler
+from app.infrastructure.database.logistics_models import SampleSetModel
 from app.infrastructure.database.models import Usuario
 from app.infrastructure.database.security import hash_password
 from app.infrastructure.database.session import Base
@@ -387,3 +388,54 @@ def test_an_urgent_set_says_so_in_the_list_and_the_detail(http, engine):
     admin = login(http)
     assert [s["is_urgent"] for s in http.get("/api/sample-sets", headers=admin).json()] == [False, True]
     assert http.get("/api/sample-sets/1", headers=admin).json()["is_urgent"] is True
+
+
+# pysqlite abre la transacción recién con un INSERT/UPDATE/DELETE: si la primera escritura del pedido fuera un
+# SAVEPOINT, su RELEASE la confirmaría y el rollback del pedido ya no la desharía.
+@pytest.fixture
+def committed_set(engine):
+    with Session(engine) as session:
+        add_sample(session, 1)
+        add_sample(session, 2)
+        sample_sets = SQLAlchemySampleSetRepository(session)
+        sample_set_id = sample_sets.open_set(False, NOW)
+        sample_sets.add_item(sample_set_id, 1, 1)
+        session.commit()
+    return sample_set_id
+
+
+def test_a_close_that_is_the_first_write_is_undone_by_the_rollback(engine, committed_set):
+    with Session(engine) as session:
+        assert SQLAlchemySampleSetRepository(session).close(committed_set, NOW, is_urgent=True)
+        session.rollback()
+    with Session(engine) as session:
+        assert statuses(session) == {committed_set: "assembling"}
+
+
+def test_adding_a_sample_as_the_first_write_is_undone_by_the_rollback(engine, committed_set):
+    with Session(engine) as session:
+        SQLAlchemySampleSetRepository(session).add_item(committed_set, 2, 2)
+        session.rollback()
+    with Session(engine) as session:
+        assert items(session) == [(committed_set, 1, 1)]
+
+
+def test_opening_a_set_as_the_first_write_is_undone_by_the_rollback(engine):
+    with Session(engine) as session:
+        SQLAlchemySampleSetRepository(session).open_set(False, NOW)
+        session.rollback()
+    with Session(engine) as session:
+        assert statuses(session) == {}
+
+
+def test_a_set_loaded_in_the_session_stays_usable_after_close(engine, committed_set):
+    # El envío (T06) escribe sobre el lote cerrado: la `version` del ORM tiene que seguir a la de la base.
+    with Session(engine) as session:
+        loaded = session.get(SampleSetModel, committed_set)
+        assert SQLAlchemySampleSetRepository(session).close(committed_set, NOW)
+        assert loaded.status == "closed"
+        loaded.csv_path = "demo.csv"
+        session.commit()
+    with Session(engine) as session:
+        saved = session.execute(text("SELECT status, version, csv_path FROM sample_sets")).one()
+        assert tuple(saved) == ("closed", 3, "demo.csv")
