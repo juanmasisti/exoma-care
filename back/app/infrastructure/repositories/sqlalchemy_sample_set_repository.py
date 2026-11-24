@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import insert, literal, select
+from sqlalchemy import func, insert, literal, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
@@ -11,7 +11,9 @@ from app.domain.entities.logistics import SAMPLE_SET_SIZE, SampleSetStatus
 from app.domain.interfaces.sample_set_repository import (
     AssemblingSetExists, SampleAlreadyInSet, SetFull, SetNotAssembling, SlotTaken,
 )
-from app.infrastructure.database.logistics_models import SampleSetItemModel, SampleSetModel
+from app.infrastructure.database.logistics_models import SampleModel, SampleSetItemModel, SampleSetModel
+from app.infrastructure.database.models import Paciente
+from app.infrastructure.database.study_models import StudyModel, StudyPathologyModel
 
 
 class SQLAlchemySampleSetRepository:
@@ -21,6 +23,16 @@ class SQLAlchemySampleSetRepository:
     def get(self, sample_set_id: int) -> dict | None:
         sample_set = self.session.get(SampleSetModel, sample_set_id)
         return self._record(sample_set) if sample_set is not None else None
+
+    def list_by_status(self, status: str | None) -> list[dict]:
+        count = (select(func.count(SampleSetItemModel.id))
+                 .where(SampleSetItemModel.sample_set_id == SampleSetModel.id).scalar_subquery())
+        query = select(SampleSetModel, count).order_by(SampleSetModel.id.desc())
+        if status is not None:
+            query = query.where(SampleSetModel.status == status)
+        return [{"id": sample_set.id, "status": sample_set.status, "is_urgent": sample_set.is_urgent,
+                 "created_at": sample_set.created_at, "closed_at": sample_set.closed_at, "sample_count": sample_count}
+                for sample_set, sample_count in self.session.execute(query)]
 
     def assembling(self) -> dict | None:
         sample_set = self.session.scalar(select(SampleSetModel)
@@ -79,13 +91,31 @@ class SQLAlchemySampleSetRepository:
             return False
         return True
 
+    def study_for_sample(self, sample_id: int) -> int | None:
+        return self.session.scalar(select(SampleModel.study_id).where(SampleModel.id == sample_id))
+
+    def pompe_inputs(self, study_id: int) -> dict | None:
+        # PROVISORIO (decisión 018): lectura directa de studies, study_pathologies y patients, como en turnos,
+        # hasta que estudios y pacientes ofrezcan estos datos. Solo lectura.
+        study = self.session.execute(select(StudyModel.created_at, Paciente.fecha_nacimiento)
+                                     .join(Paciente, Paciente.id == StudyModel.patient_id)
+                                     .where(StudyModel.id == study_id)).first()
+        if study is None:
+            return None
+        codes = self.session.scalars(select(StudyPathologyModel.code)
+                                     .where(StudyPathologyModel.study_id == study_id)).all()
+        return {"pathology_codes": list(codes), "birth_date": study.fecha_nacimiento,
+                "study_created_at": study.created_at}
+
     def _record(self, sample_set: SampleSetModel) -> dict:
-        items = self.session.execute(select(SampleSetItemModel.slot, SampleSetItemModel.sample_id)
+        items = self.session.execute(select(SampleSetItemModel.slot, SampleSetItemModel.sample_id, SampleModel.study_id)
+                                     .join(SampleModel, SampleModel.id == SampleSetItemModel.sample_id)
                                      .where(SampleSetItemModel.sample_set_id == sample_set.id)
                                      .order_by(SampleSetItemModel.slot)).all()
         return {"id": sample_set.id, "status": sample_set.status, "is_urgent": sample_set.is_urgent,
                 "created_at": sample_set.created_at, "closed_at": sample_set.closed_at,
-                "items": [{"slot": slot, "sample_id": sample_id} for slot, sample_id in items]}
+                "items": [{"slot": slot, "sample_id": sample_id, "study_id": study_id}
+                          for slot, sample_id, study_id in items]}
 
     def commit(self) -> None:
         self.session.commit()
