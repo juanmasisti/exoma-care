@@ -8,7 +8,7 @@ const posts = () => calls.filter((c) => c.method === 'post').map((c) => [c.url, 
 
 test('un lote cerrado y autorizado muestra el estado, las descargas y el formulario del retiro', async () => {
   await render()
-  assert.equal(calls[0].authorization, 'Bearer test-token')
+  assert.equal(calls.find((c) => c.url === '/shipments/1').authorization, 'Bearer test-token')
   const text = section().textContent
   assert.match(text, /Estado.*Cerrado/)
   assert.match(text, /Autorización del Ministerio de Salud.*Autorizado.*SIMULADO/)

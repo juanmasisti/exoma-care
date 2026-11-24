@@ -66,7 +66,13 @@ beforeEach(() => {
     if (config.url === '/shipments/1/refresh') return ok(fake.shipment = { ...fake.shipment, status: fake.afterRefresh ?? fake.shipment.status })
     if (config.url === '/shipments/1/csv') return ok(new Blob(['dni,apellido'], { type: 'text/csv' }))
     if (config.url === '/shipments/1/authorization.pdf') return ok(new Blob(['%PDF-DEMO'], { type: 'application/pdf' }))
-    // El resto del detalle del lote es de T05: acá no existe.
+    // Detalle del lote (T05): lo carga antes de montar el envío. Sigue el estado del envío del doble.
+    if (config.url === '/sample-sets/1') {
+      const { status } = fake.shipment
+      return ok({ id: 1, status, is_urgent: false, created_at: '2026-11-20T10:00:00-03:00',
+        closed_at: status === 'assembling' ? null : '2026-11-21T11:00:00-03:00',
+        samples: Array.from({ length: 10 }, (_, index) => ({ slot: index + 1, sample_id: 11 + index, study_code: `EST-0000${11 + index}` })) })
+    }
     throw failure(config, 404, 'Not Found')
   }
 })
