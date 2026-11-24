@@ -142,7 +142,7 @@ def test_slots_go_from_1_to_10_and_a_sample_belongs_to_one_set(engine):
             sample_sets.add_item(sample_set_id, 11, 11)
         with pytest.raises(SampleAlreadyInSet):
             sample_sets.add_item(sample_set_id, 1, 1)
-        # Los choques no deshacen lo anterior: se deshace solo el savepoint.
+        # Los choques no deshacen lo anterior: el INSERT condicional no escribe nada y la transacción sigue entera.
         sample_sets.commit()
         assert [item["slot"] for item in sample_sets.get(sample_set_id)["items"]] == list(range(1, 11))
 
@@ -173,15 +173,18 @@ def test_a_set_closed_by_another_request_is_not_closed_again_and_the_session_kee
         # Se retiene el modelo: así sigue en la sesión, "armándose" y con la versión 1.
         loaded = session.get(SampleSetModel, sample_set_id)
         session.commit()  # suelta el lock de SQLite sin expirar el lote cargado
-        # Otro pedido cambia el lote entre la lectura y el cierre: solo sube la versión, así `close`
-        # pasa el chequeo de estado en memoria y choca recién en el flush.
+        # Otro pedido cierra el lote entre la lectura y el cierre: en memoria sigue "armándose", pero el
+        # UPDATE condicional de `close` (decisión 018) mira la base y no lo vuelve a cerrar.
         with engine.begin() as other:
-            other.execute(text("UPDATE sample_sets SET version = version + 1 WHERE id = :id"), {"id": sample_set_id})
+            other.execute(text("UPDATE sample_sets SET status = 'closed', version = version + 1 WHERE id = :id"),
+                          {"id": sample_set_id})
+        assert loaded.status == "assembling"
         SQLAlchemySampleRepository(session).change_status([1], "ready_for_pickup", "with_transporter", NOW)
         assert not sample_sets.close(sample_set_id, NOW)
         sample_sets.commit()  # lo demás del pedido se guarda
         assert session.scalar(text("SELECT status FROM samples WHERE id = 1")) == "with_transporter"
-        assert loaded.status == "assembling"  # el lote quedó como lo dejó el otro pedido
+        # El lote quedó como lo dejó el otro pedido.
+        assert session.scalar(text("SELECT version FROM sample_sets WHERE id = :id"), {"id": sample_set_id}) == 2
 
 
 def test_a_closed_set_does_not_take_more_samples_even_if_it_was_read_while_assembling(engine):

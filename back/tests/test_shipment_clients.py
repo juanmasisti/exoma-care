@@ -1,149 +1,18 @@
+"""Clientes del envío (T06a): adaptador de FedEx y Ministerio simulado. La API del envío está en test_shipments_api.py."""
 import base64
 import json
 from datetime import UTC, datetime
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_database_session
-from app.api.routes.extraction_centers import get_clock
-from app.api.routes.shipments import get_courier
-from app.config import get_settings
 from app.domain.entities.logistics import TIMEZONE
 from app.domain.interfaces.courier import CourierError, PickupStatus
 from app.infrastructure.adapters.fedex_client import FedExClient
 from app.infrastructure.adapters.simulated_health_ministry import SimulatedHealthMinistry
-from app.infrastructure.database.models import Usuario
-from app.infrastructure.database.security import hash_password
-from app.infrastructure.database.session import Base
-from app.main import app
 
-TEST_HASH = hash_password("shipment-test-password")
 NOW = datetime(2026, 12, 1, 12, 0, tzinfo=TIMEZONE)
 PICKUP_ID = "3f2b8c1e-6d4a-4f7e-9a10-2b5c7d8e9f01"
-
-
-class FakeCourier:
-    """Doble del Protocol Courier: anota cada llamada y, si `error` está cargado, lo lanza."""
-
-    def __init__(self):
-        self.calls = []
-        self.error = None
-
-    def programar_retiro(self, lugar, fecha):
-        self.calls.append((lugar, fecha))
-        if self.error:
-            raise self.error
-        return PICKUP_ID
-
-    def estado_retiro(self, uuid):
-        self.calls.append(uuid)
-        if self.error:
-            raise self.error
-        return PickupStatus.RETIRADO
-
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("JWT_SECRET_KEY", "shipment-test-secret-at-least-32-bytes-long")
-    engine = create_engine(f"sqlite:///{tmp_path / 'shipments.db'}", connect_args={"check_same_thread": False})
-    event.listen(engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON"))
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        for identifier, role in enumerate(["lab_administrator", "patient"], 1):
-            session.add(Usuario(id=identifier, username=f"demo{identifier}", role=role, first_name="Demo",
-                                last_name="Prueba", phone="000", email=f"demo{identifier}@example.test",
-                                password_hash=TEST_HASH))
-        session.commit()
-    courier = FakeCourier()
-
-    def database_session():
-        with Session(engine) as session:
-            yield session
-    app.dependency_overrides[get_database_session] = database_session
-    app.dependency_overrides[get_courier] = lambda: courier
-    app.dependency_overrides[get_clock] = lambda: NOW
-    try:
-        with TestClient(app) as http:
-            yield http, courier
-    finally:
-        app.dependency_overrides.clear()
-        engine.dispose()
-
-
-def login(http, identifier=1):
-    result = http.post("/api/auth/login", json={"email": f"demo{identifier}@example.test",
-                                                "password": "shipment-test-password"})
-    assert result.status_code == 200
-    return {"Authorization": "Bearer " + result.json()["access_token"]}
-
-
-def schedule(http, scheduled_at, identifier=1):
-    return http.post("/api/shipments/pickups", json={"scheduled_at": scheduled_at}, headers=login(http, identifier))
-
-
-def test_schedule_pickup_sends_lab_address_and_aware_date(client):
-    http, courier = client
-    response = schedule(http, "2026-12-15T18:00:00Z")
-    assert response.status_code == 201
-    assert response.json() == {"pickup_id": PICKUP_ID}
-    ((lugar, fecha),) = courier.calls
-    assert lugar == get_settings().central_lab_address
-    assert fecha == datetime(2026, 12, 15, 18, tzinfo=UTC)
-
-
-def test_pickup_status_comes_from_the_courier(client):
-    http, courier = client
-    response = http.get(f"/api/shipments/pickups/{PICKUP_ID}", headers=login(http))
-    assert response.status_code == 200
-    assert response.json() == {"pickup_id": PICKUP_ID, "status": "RETIRADO"}
-    assert courier.calls == [PICKUP_ID]
-
-
-def test_courier_error_is_a_readable_502(client):
-    http, courier = client
-    courier.error = CourierError("FedEx tardó demasiado en responder.")
-    response = schedule(http, "2026-12-15T15:00:00-03:00")
-    assert response.status_code == 502
-    assert response.json()["detail"] == "FedEx tardó demasiado en responder."
-    response = http.get(f"/api/shipments/pickups/{PICKUP_ID}", headers=login(http))
-    assert response.status_code == 502
-
-
-@pytest.mark.parametrize("scheduled_at", ["2026-12-01T09:00:00-03:00", "2026-12-01T12:00:00-03:00"])
-def test_past_or_now_date_is_422_without_calling_fedex(client, scheduled_at):
-    http, courier = client
-    response = schedule(http, scheduled_at)
-    assert response.status_code == 422
-    assert response.json()["detail"] == "La fecha del retiro tiene que ser futura."
-    assert courier.calls == []
-
-
-def test_validation_errors(client):
-    http, courier = client
-    assert schedule(http, "2026-12-15T15:00:00").status_code == 422  # sin zona horaria
-    assert http.get("/api/shipments/pickups/no-es-un-uuid", headers=login(http)).status_code == 422
-    assert courier.calls == []
-
-
-def test_permissions(client):
-    http, _courier = client
-    assert http.post("/api/shipments/pickups", json={"scheduled_at": "2026-12-15T18:00:00Z"}).status_code == 401
-    assert http.get(f"/api/shipments/pickups/{PICKUP_ID}").status_code == 401
-    assert schedule(http, "2026-12-15T18:00:00Z", identifier=2).status_code == 403
-    assert http.get(f"/api/shipments/pickups/{PICKUP_ID}", headers=login(http, 2)).status_code == 403
-
-
-def test_missing_fedex_configuration_is_a_502(client, monkeypatch):
-    http, _courier = client
-    del app.dependency_overrides[get_courier]
-    monkeypatch.setenv("FEDEX_URL", "")
-    response = schedule(http, "2026-12-15T18:00:00Z")
-    assert response.status_code == 502
-    assert response.json()["detail"] == "FedEx no está configurado."
 
 
 # Adaptador HTTP con un transporte falso de httpx: no sale a internet.

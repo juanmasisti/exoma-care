@@ -130,25 +130,12 @@ CENTRAL_LAB_LATITUDE=-34.921559
 CENTRAL_LAB_LONGITUDE=-57.938362
 ```
 
-`POST /api/transport/route-preview`. Por ahora es para el rol `lab_administrator`, hasta que
-exista `transporter`. **Provisorio para la demo:** en T04 los centros salen de la orden del día.
+El endpoint provisorio `POST /api/transport/route-preview` se borró en T04: los centros salen de la
+orden del día (ver [Orden del día y transportista](#orden-del-día-y-transportista-t04)). El recorrido
+sale del Laboratorio Central (Calle 62 N° 555, La Plata) y vuelve a él. Con un solo centro no se llama
+al módulo.
 
-```json
-{"center_ids": [12, 3, 47]}
-```
-
-Devuelve los centros activos (con la misma forma que `GET /api/extraction-centers`) en el orden de
-visita. El recorrido sale del Laboratorio Central (Calle 62 N° 555, La Plata) y vuelve a él.
-
-| Caso | Respuesta |
-| --- | --- |
-| 0 o 1 centros | 200 con la misma lista, sin llamar al módulo |
-| Centro inexistente o inactivo | 404 |
-| Ids repetidos o más de 100 | 422 |
-| El módulo falla, tarda más de 5 s o devuelve un punto que no es de ningún centro | 502 con el motivo; no se arma ningún orden |
-| Sin token / otro rol | 401 / 403 |
-
-Pruebas: `tests/test_route_preview_api.py` (doble del módulo; no salen a internet).
+Pruebas del cliente: `tests/test_transport_api.py` (con un doble del módulo; no salen a internet).
 
 ## Documentos del turno (T02b)
 
@@ -184,36 +171,23 @@ permisos) y `front/tests/turnos-dia-extraccion.test.mjs`. Detalles y pendientes 
 
 ## Clientes del envío a Corea (T06a)
 
-**PROVISORIO para la demo:** en T06 estos endpoints se reemplazan por el flujo del lote
-(CSV, autorización del Ministerio, día hábil de 9 a 18 y estado `awaiting_pickup`).
+Los usa el envío del lote ([T06](#envío-internacional-t06)); los endpoints provisorios
+`/api/shipments/pickups` se borraron en T06.
 
-| Método y ruta | Rol | Función |
-| --- | --- | --- |
-| POST /api/shipments/pickups | `lab_administrator` | Programa un retiro de FedEx en el Laboratorio Central. Cuerpo `{"scheduled_at": "2026-12-15T15:00:00-03:00"}`; responde **201** `{"pickup_id": "<uuid>"}` |
-| GET /api/shipments/pickups/{pickup_id} | `lab_administrator` | Consulta el retiro en FedEx; responde `{"pickup_id", "status"}` con `status` `PROGRAMADO` o `RETIRADO` |
-
-- `scheduled_at` lleva zona horaria (`Z` u offset). Se le manda a FedEx en hora argentina
-  sin zona (`logistics.TIMEZONE`), como pide su contrato.
-- El lugar es `CENTRAL_LAB_ADDRESS` (por defecto "Laboratorio Central, Calle 62 N° 555, La Plata").
-
-Errores:
-
-| Caso | Respuesta |
-| --- | --- |
-| Fecha sin zona horaria, fecha pasada o igual a ahora, `pickup_id` que no es UUID | 422 (la fecha pasada se rechaza **sin llamar a FedEx**) |
-| FedEx responde 400, 401, 404 o 5xx, tarda más de 5 s, no contesta o responde algo mal formado | 502 con el motivo en español (incluye el `error` de FedEx si viene) |
-| Falta `FEDEX_URL`, `FEDEX_USER` o `FEDEX_PASS` | 502 "FedEx no está configurado." |
-| Sin token / otro rol | 401 / 403 |
+- `FedExClient` manda `scheduled_at` a FedEx en hora argentina sin zona (`logistics.TIMEZONE`),
+  como pide su contrato. El lugar es `CENTRAL_LAB_ADDRESS` (por defecto "Laboratorio Central,
+  Calle 62 N° 555, La Plata").
+- Si FedEx responde 400, 401, 404 o 5xx, tarda más de 5 s, no contesta o responde algo mal
+  formado, el cliente lanza un error con el motivo en español (incluye el `error` de FedEx si viene).
 
 Configuración en `back/.env` (nunca en el repo): `FEDEX_URL` (URL base del módulo 10),
 `FEDEX_USER` y `FEDEX_PASS` (credenciales del grupo, Basic Auth).
 
 El Ministerio de Salud no tiene endpoint: `SimulatedHealthMinistry` (SIMULADO) siempre
-autoriza y devuelve un PDF con las filas del CSV. Lo usa T06.
+autoriza y devuelve un PDF con las filas del CSV.
 
-Pruebas: `back/tests/test_shipment_clients.py` (doble de `Courier`, reloj fijo y
-`httpx.MockTransport`; no salen a internet). Detalles en la
-[decisión 012](decisiones/012-clientes-envio.md).
+Pruebas: `back/tests/test_shipment_clients.py` (`httpx.MockTransport`; no salen a internet).
+Detalles en la [decisión 012](decisiones/012-clientes-envio.md).
 
 ## Extracción y remuestreo (T03)
 
@@ -477,12 +451,148 @@ Pruebas: `back/tests/test_logistics_domain.py`, `back/tests/test_logistics_base.
 
 ## Orden del día y transportista (T04)
 
-Pendiente: la completa T04 (decisión 017).
+Cada día hábil, una orden por provincia con los centros activos que tienen muestras listas para retirar,
+en el orden fijo que devuelve el módulo de recorridos. El transportista retira centro por centro y
+registra la llegada al Laboratorio Central, que recibe las muestras y dispara el armado de lotes. Detalle
+en la [decisión 017](decisiones/017-orden-del-dia.md).
+
+`TRANSPORT_ROLES` es PROVISORIO: hoy es el administrativo (decisión 016).
+
+| Endpoint | Rol | Respuesta |
+| --- | --- | --- |
+| `POST /api/transport/daily-routes` `{"date": "2026-11-02"}` | `lab_administrator` | 201 si creó alguna orden, 200 si ya estaban todas (no toca las existentes). Lista de órdenes del día |
+| `GET /api/transport/daily-routes?date=` | `lab_administrator` | órdenes del día: `province`, `status`, `stops` y `picked_up` (avance) |
+| `GET /api/transport/my-route?date=&province_id=` | `TRANSPORT_ROLES` | orden con `province`, `stops` en secuencia (centro, `picked_up_at`, `sample_codes`), `next_stop_id` y `on_board`. `province_id` es PROVISORIO |
+| `POST /api/transport/daily-routes/{id}/stops/{stop_id}/pickup` | `TRANSPORT_ROLES` | comprobante: `center`, `picked_up_at` y `sample_codes` retirados |
+| `POST /api/transport/daily-routes/{id}/arrival` | `TRANSPORT_ROLES` | `arrived_at` y `received_codes`. Llama a `SampleSetAssigner.asignar_a_sample_set` por cada muestra |
+
+| Caso | Respuesta |
+| --- | --- |
+| Sábado, domingo o feriado | 422 con el motivo |
+| El módulo de recorridos falla, tarda más de 5 s o devuelve un punto que no es de ningún centro | 502; no se guarda ninguna orden |
+| `my-route` sin orden para esa provincia y fecha; parada que no es de la orden | 404 |
+| Retirar un centro antes que el anterior, o retirarlo dos veces | 409 |
+| Llegada con centros sin retirar, o registrada dos veces | 409 |
+| Un centro se da de baja mientras se genera la orden | 409; no se guarda ninguna orden |
+| Error inesperado del armado de lotes | 500; se deshace la llegada entera |
+| Sin token / otro rol | 401 / 403 |
+
+El retiro pasa a `with_transporter` las muestras listas del centro en ese momento y guarda cada una en
+`route_pickups`. La llegada pasa a `received` exactamente esas. Las horas vienen en hora de Argentina.
+
+Pantallas:
+
+- `/administrativo/ordenes-del-dia`: fecha (hoy por defecto), "Generar órdenes" y cada provincia con
+  su avance.
+- `/transporte`: provincia (select PROVISORIO), resumen y siguiente centro. Desde ahí:
+  - `/transporte/orden`: la secuencia completa; solo se abre el siguiente centro;
+  - `/transporte/centro/:stopId` (id de la parada): confirmar el retiro y ver el comprobante;
+  - `/transporte/a-bordo`: muestras a bordo, fin de recorrido y llegada.
+
+Para probarlo con el seeder (`python -m seeders logistics`, grupo `lista`):
+
+- entrá como el administrativo DEMO y generá la orden de un día hábil;
+- en `/transporte`, elegí Buenos Aires (3 centros de La Plata) o Córdoba (1 centro);
+- retirá en orden y registrá la llegada.
+
+Mientras no esté T05, la llegada no arma lotes.
+
+Pruebas: `back/tests/test_transport_api.py`, `front/tests/transportista-ordenes.test.mjs` y
+`front/tests/transportista-recorrido.test.mjs` (armado común en `front/tests/transportista-setup.mjs`).
 
 ## Sample sets (T05)
 
-Pendiente: la completa T05 (decisión 018).
+Arma los lotes de 10 muestras solo, al registrar la llegada, y los cierra antes si llega un Pompe
+urgente. Detalles en la [decisión 018](decisiones/018-sample-sets.md).
+
+- **Armado** (`SampleSetService.asignar_a_sample_set`, en `back/app/use_cases/sample_sets.py`): la
+  llegada (T04, cuando se una) lo va a recibir con `Depends(get_sample_set_assigner)` por cada muestra recibida. Pasa la
+  muestra de `received` a `in_sample_set`, la suma al lote `assembling` (o abre uno) en el siguiente
+  lugar libre y, con 10 muestras o un Pompe urgente, cierra el lote y llama una sola vez a
+  `al_cerrar_lote` (T06). No confirma nada: el commit lo hace la llegada.
+- **Choques, sin `FOR UPDATE`**: lugar tomado → prueba el siguiente; lote lleno o cerrado por otro
+  pedido → relee y, si hace falta, abre otro; lote abierto a la vez por otro pedido → usa ese. Con
+  cinco relecturas seguidas falla y se deshace la llegada entera (un lugar tomado no cuenta).
+- **Pompe urgente**: un estudio con la patología de código `POMPE` (sin distinguir mayúsculas) y un
+  paciente menor de 4 meses **al alta del estudio** (propuesta). Sin fecha de nacimiento no es
+  urgente (propuesta). Se cierra el lote armándose con lo que tenga o, si no hay, sale un lote de 1.
+  `SampleSetService.es_pompe_urgente(study_id)` queda para bioinformática (sin endpoint).
+
+| Método | Ruta | Rol | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/api/sample-sets?status=` | `lab_administrator` | Lotes (todos sin `status`), del más nuevo al más viejo: `id`, `status`, `is_urgent`, `created_at`, `closed_at`, `sample_count` |
+| GET | `/api/sample-sets/{id}` | `lab_administrator` | Lo mismo sin `sample_count` y con `samples`: `slot`, `sample_id`, `study_code`. Sin datos del paciente. 404 si no existe |
+
+`status` es `assembling`, `closed`, `awaiting_pickup` o `in_transit_to_sequencing_lab`; otro valor
+da 422. Las fechas salen en hora de Argentina.
+
+**Pantallas** (`front/src/features/logistica/lotes/`): `/administrativo/lotes` lista los lotes por
+estado (Armándose, Cerrados, Esperando retiro, En viaje), con la pestaña en la URL
+(`?estado=closed`). `/administrativo/lotes/:id` muestra estado, urgencia, fechas y los lugares con
+el código de estudio, y debajo el envío de T06 (`<EnvioLote session sampleSetId onChange />`, que
+recarga el lote).
+
+Pruebas: `back/tests/test_sample_sets_api.py` y `front/tests/lotes.test.mjs` (con su propio doble de
+la API, `front/tests/lotes-setup.mjs`). Pompe no está en el seeder (solo carga Fabry): se prueba ahí.
 
 ## Envío internacional (T06)
 
-Pendiente: la completa T06 (decisión 019).
+Cuando el armado de lotes (T05) cierra un lote, el enganche `al_cerrar_lote` arma el CSV, pide la
+autorización al Ministerio de Salud (SIMULADO) y guarda los dos archivos. Después el administrativo
+programa el retiro de FedEx y consulta su estado. Detalles en la
+[decisión 019](decisiones/019-envio-internacional.md).
+
+| Método y ruta | Función |
+| --- | --- |
+| GET /api/shipments/{sample_set_id} | Estado del envío del lote |
+| POST /api/shipments/{sample_set_id}/authorization | Reintenta la autorización del Ministerio |
+| GET /api/shipments/{sample_set_id}/csv | Descarga el CSV (`lote-<id>.csv`) |
+| GET /api/shipments/{sample_set_id}/authorization.pdf | Descarga el PDF (`lote-<id>-autorizacion.pdf`) |
+| POST /api/shipments/{sample_set_id}/pickup | Programa el retiro. Cuerpo `{"scheduled_at": "2026-12-02T10:00:00-03:00"}` |
+| POST /api/shipments/{sample_set_id}/refresh | Consulta FedEx; con `RETIRADO`, pasa el lote al viaje |
+
+Todos son del rol `lab_administrator`. El GET y los POST responden lo mismo:
+
+```json
+{"id": 1, "status": "awaiting_pickup", "has_csv": true, "has_authorization": true,
+ "pickup_at": "2026-12-02T10:00:00-03:00", "courier_pickup_id": "<uuid de FedEx>"}
+```
+
+- **CSV**: `dni,apellido,nombre,codigo_estudio,id_muestra`, una fila por muestra del lote, en el
+  orden de sus lugares. Los datos del paciente salen de su repositorio.
+- **Ministerio caído al cerrar**: el cierre no falla; el lote queda `closed` sin PDF y se reintenta
+  con `POST .../authorization`. El PDF queda asociado a cada estudio a través de `sample_set_items`.
+- **Retiro**: día hábil, desde las 9 y antes de las 18 (hora argentina), sin feriados de la tabla
+  `holidays`. FedEx retira en `CENTRAL_LAB_ADDRESS`. El lote pasa a `awaiting_pickup`.
+- **Consulta**: `PROGRAMADO` no cambia nada. `RETIRADO` pasa el lote y sus muestras a
+  `in_transit_to_sequencing_lab` y cada estudio a `en_viaje_a_corea` (estado de Tomás, sin
+  renombrar todavía). Consultar un lote ya en viaje no vuelve a llamar a FedEx ni repite nada.
+
+Errores:
+
+| Caso | Respuesta |
+| --- | --- |
+| Lote inexistente, archivo todavía no generado | 404 |
+| Ya autorizado, lote armándose, retiro sin autorización, retiro ya programado, consulta sin retiro, otro pedido lo cambió antes | 409 |
+| Fecha sin zona horaria, pasada, fuera de horario, fin de semana o feriado | 422 |
+| El Ministerio o FedEx fallan, no se pudo guardar el CSV o el PDF, o falta `FEDEX_URL`, `FEDEX_USER` o `FEDEX_PASS` | 502 (el lote no cambia) |
+| Sin token / otro rol | 401 / 403 |
+
+Configuración: `SHIPMENT_FILES_DIR`, la carpeta del CSV y el PDF, fuera del repo. Vacío o sin
+definir: `~/exoma-care-archivos`. En el lote se guarda solo el nombre del archivo.
+
+FedEx no avisa cuando retira y no hay cron. Para la demo se consulta con el botón "Actualizar
+estado" del lote o con el comando (desde `back/`):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.consultar_retiros
+```
+
+Recorre los lotes `awaiting_pickup` y consulta cada uno. Sus eventos de muestra quedan sin usuario.
+
+Pantalla: el bloque "Envío" del detalle del lote (`/administrativo/lotes/:id`,
+`front/src/features/logistica/lotes/EnvioLote.jsx`) muestra el estado y la autorización, y deja
+pedir la autorización, descargar el CSV y el PDF, programar el retiro y actualizar el estado.
+
+Pruebas: `back/tests/test_shipments_api.py` (FedEx con un doble, archivos en una carpeta temporal)
+y `front/tests/envio-lote.test.mjs`.

@@ -1,0 +1,24 @@
+/* Extras de las pantallas de transporte; la base es el estilo de Consultas de turnos.css (.turnos-patient). */
+.transporte-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.transporte-toolbar input[type="date"] { border: 1px solid var(--turnos-line); border-radius: 9px; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--turnos-ink); min-height: 44px; background: #fff; }
+.transporte-result { margin: 0 0 16px; }
+.transporte-progress p { margin: 12px 0 6px; font-size: 13px; color: var(--turnos-muted); }
+.transporte-progress strong { color: var(--turnos-ink); }
+.transporte-progress progress { width: 100%; max-width: 420px; height: 8px; accent-color: var(--turnos-accent); }
+.transporte-block { margin-bottom: 16px; }
+.transporte-block select { max-width: 360px; }
+.transporte-text { margin: 12px 0 0; font-size: 14px; line-height: 1.6; }
+.transporte-text small { display: block; color: var(--turnos-muted); }
+.transporte-kpis { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.transporte-kpis li { border: 1px solid var(--turnos-line); border-radius: 14px; background: #fff; padding: 14px; font-size: 12px; color: var(--turnos-muted); }
+.transporte-kpis strong { display: block; font-size: 1.6rem; color: var(--turnos-ink); }
+.transporte-next { border-color: var(--turnos-accent-line); box-shadow: inset 4px 0 0 var(--turnos-accent); }
+.transporte-badge-next { background: var(--turnos-accent); color: #fff; }
+.transporte-badge-pending { background: #f1f5f9; color: var(--turnos-muted); }
+.transporte-codes { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.transporte-codes li { padding: 6px 10px; border-radius: 8px; background: var(--turnos-accent-soft); font-family: ui-monospace, monospace; font-size: 13px; }
+.transporte-confirm { margin-top: 16px; }
+@media (max-width: 600px) {
+  .transporte-toolbar > *, .transporte-confirm button { flex: 1 1 100%; }
+  .transporte-kpis { grid-template-columns: minmax(0, 1fr); }
+}

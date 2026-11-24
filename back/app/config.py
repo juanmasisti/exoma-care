@@ -5,6 +5,7 @@ from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACK_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_SHIPMENT_FILES_DIR = Path.home() / "exoma-care-archivos"
 
 
 class Settings(BaseSettings):
@@ -80,10 +81,17 @@ class Settings(BaseSettings):
     fedex_url: str | None = None
     fedex_user: str | None = None
     fedex_pass: SecretStr | None = None
+    # CSV y PDF de autorización de cada lote, fuera del repo.
+    shipment_files_dir: Path = DEFAULT_SHIPMENT_FILES_DIR
     # Secreto compartido con el bot de extracción (header X-Webhook-Secret). Sin valor, el webhook rechaza todo.
     extraction_webhook_secret: SecretStr | None = None
     # Herramientas de demo (simulador del bot en la app). Apagadas: sus endpoints dan 404.
     demo_tools_enabled: bool = False
+
+    @field_validator("shipment_files_dir", mode="before")
+    @classmethod
+    def empty_shipment_files_dir_is_default(cls, value):
+        return DEFAULT_SHIPMENT_FILES_DIR if value == "" else value
 
     @field_validator("extraction_webhook_secret", mode="before")
     @classmethod
