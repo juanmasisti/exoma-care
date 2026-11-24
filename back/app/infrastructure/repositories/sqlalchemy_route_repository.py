@@ -8,14 +8,20 @@ from sqlalchemy.orm import Session
 from app.domain.entities.logistics import TIMEZONE, DailyRouteStatus, SampleStatus, study_code
 from app.domain.interfaces.route_repository import RouteAlreadyExists
 from app.infrastructure.database.logistics_models import (
-    AppointmentModel, DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, RouteStopModel,
-    SampleModel, UTCDateTime,
+    AppointmentModel, DailyRouteModel, ExtractionCenterModel, ExtractionNoticeModel, ProvinceModel, RoutePickupModel,
+    RouteStopModel, SampleModel, UTCDateTime,
 )
 
 
 def _local(at: datetime | None) -> datetime | None:
     # En hora de Argentina, como el resto de las respuestas de logística: el front la muestra sin convertir.
     return at.astimezone(TIMEZONE) if at is not None else None
+
+
+def _taken_at(payload: dict) -> datetime | None:
+    # Hora de extracción que mandó el bot en el aviso (T03). Los avisos sin ella devuelven None.
+    taken_at = payload.get("taken_at") if isinstance(payload, dict) else None
+    return _local(datetime.fromisoformat(taken_at)) if taken_at else None
 
 
 class SQLAlchemyRouteRepository:
@@ -93,24 +99,28 @@ class SQLAlchemyRouteRepository:
                 "status": route.status, "arrived_at": _local(route.arrived_at),
                 "stops": [{"id": stop.id, "sequence": stop.sequence, "picked_up_at": _local(stop.picked_up_at),
                            "center": {"id": center.id, "name": center.name, "address": center.address,
-                                      "city": center.city},
+                                      "city": center.city, "latitude": center.latitude,
+                                      "longitude": center.longitude},
                            **self._stop_samples(stop)}
                           for stop, center in stops]}
 
     def _stop_samples(self, stop: RouteStopModel) -> dict:
         # Antes del retiro, las que el centro tiene listas ahora; después, exactamente las que se retiraron.
+        # Solo datos de la muestra (código, volumen y hora de extracción), nada del paciente.
+        query = (select(SampleModel.id, SampleModel.study_id, SampleModel.volume_ml, ExtractionNoticeModel.payload)
+                 .join(ExtractionNoticeModel, ExtractionNoticeModel.id == SampleModel.extraction_notice_id))
         if stop.picked_up_at is None:
-            query = (select(SampleModel.id, SampleModel.study_id)
-                     .join(AppointmentModel, AppointmentModel.id == SampleModel.appointment_id)
+            query = (query.join(AppointmentModel, AppointmentModel.id == SampleModel.appointment_id)
                      .where(AppointmentModel.center_id == stop.center_id,
                             SampleModel.status == SampleStatus.READY_FOR_PICKUP.value))
         else:
-            query = (select(SampleModel.id, SampleModel.study_id)
-                     .join(RoutePickupModel, RoutePickupModel.sample_id == SampleModel.id)
+            query = (query.join(RoutePickupModel, RoutePickupModel.sample_id == SampleModel.id)
                      .where(RoutePickupModel.stop_id == stop.id))
         rows = self.session.execute(query.order_by(SampleModel.id)).all()
-        return {"sample_ids": [sample_id for sample_id, _ in rows],
-                "sample_codes": [study_code(study_id) for _, study_id in rows]}
+        return {"sample_ids": [row.id for row in rows],
+                "sample_codes": [study_code(row.study_id) for row in rows],
+                "samples": [{"code": study_code(row.study_id), "volume_ml": row.volume_ml,
+                             "taken_at": _taken_at(row.payload)} for row in rows]}
 
     def mark_stop_picked(self, stop_id: int, at: datetime) -> bool:
         # Condicional: de dos retiros a la vez del mismo centro, solo uno lo marca.

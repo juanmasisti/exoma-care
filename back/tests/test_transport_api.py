@@ -14,7 +14,8 @@ from app.domain.interfaces.route_optimizer import RouteOptimizerError
 from app.domain.interfaces.route_repository import RouteAlreadyExists
 from app.infrastructure.adapters.route_optimizer_client import RouteOptimizerClient
 from app.infrastructure.database.logistics_models import (
-    DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, SampleEventModel, SampleModel,
+    DailyRouteModel, ExtractionCenterModel, ExtractionNoticeModel, ProvinceModel, RoutePickupModel, SampleEventModel,
+    SampleModel,
 )
 from app.infrastructure.repositories.sqlalchemy_route_repository import SQLAlchemyRouteRepository
 from app.main import app
@@ -284,6 +285,34 @@ def test_my_route_shows_the_fixed_order_the_centers_and_their_codes(transport):
     assert all(code.startswith("EST-") for stop in route["stops"] for code in stop["sample_codes"])
     assert route["next_stop_id"] == route["stops"][0]["id"]
     assert route["on_board"] == []
+
+
+def test_my_route_brings_coordinates_the_central_lab_and_sample_data_without_patient_data(transport):
+    http, engine, _optimizer = transport
+    with Session(engine) as session:  # un aviso viejo sin hora de extracción (La Plata 1, en la orden de Buenos Aires)
+        notice = session.get(ExtractionNoticeModel, session.scalar(
+            select(SampleModel.extraction_notice_id).where(SampleModel.status == "ready_for_pickup")
+            .order_by(SampleModel.id)))
+        notice.payload = {key: value for key, value in notice.payload.items() if key != "taken_at"}
+        session.commit()
+    route = ready_route(http, engine)
+    settings = get_settings()
+    assert route["central_lab"] == {"address": settings.central_lab_address, "latitude": settings.central_lab_latitude,
+                                    "longitude": settings.central_lab_longitude}
+    with Session(engine) as session:
+        center = session.get(ExtractionCenterModel, route["stops"][0]["center"]["id"])
+        assert (route["stops"][0]["center"]["latitude"], route["stops"][0]["center"]["longitude"]) == (
+            center.latitude, center.longitude)
+    samples = [sample for stop in route["stops"] for sample in stop["samples"]]
+    assert [sample["code"] for sample in samples] == [code for stop in route["stops"] for code in stop["sample_codes"]]
+    assert all(set(sample) == {"code", "volume_ml", "taken_at"} for sample in samples)
+    assert {sample["volume_ml"] for sample in samples} == {"4.00"}
+    taken = sorted((sample["taken_at"] for sample in samples), key=lambda at: at or "")
+    assert taken[0] is None and all(at.endswith("10:00:00-03:00") for at in taken[1:])
+    # Ya retirada, la parada muestra exactamente las muestras retiradas, con los mismos datos.
+    before = route["stops"][0]["samples"]
+    assert pick_up(http, route, 0).status_code == 200
+    assert my_route(http, engine).json()["stops"][0]["samples"] == before
 
 
 def test_my_route_is_404_without_a_route(transport):

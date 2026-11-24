@@ -1,5 +1,6 @@
 import datetime as dt
 from contextlib import contextmanager
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -73,12 +74,30 @@ class CenterSummary(BaseModel):
     city: str
 
 
+class StopCenter(CenterSummary):
+    latitude: float
+    longitude: float
+
+
+class StopSample(BaseModel):
+    code: str
+    volume_ml: Decimal
+    taken_at: dt.datetime | None
+
+
 class StopResponse(BaseModel):
     id: int
     sequence: int
-    center: CenterSummary
+    center: StopCenter
     picked_up_at: dt.datetime | None
     sample_codes: list[str]
+    samples: list[StopSample]
+
+
+class CentralLab(BaseModel):
+    address: str
+    latitude: float
+    longitude: float
 
 
 class RouteDetailResponse(BaseModel):
@@ -91,6 +110,8 @@ class RouteDetailResponse(BaseModel):
     stops: list[StopResponse]
     next_stop_id: int | None
     on_board: list[str]
+    # Partida y destino del recorrido, para el mapa de la orden.
+    central_lab: CentralLab
 
 
 class PickupReceipt(BaseModel):
@@ -129,7 +150,11 @@ def list_daily_routes(date: dt.date, _admin: AuthenticatedUser = Depends(lab_adm
 def my_route(date: dt.date, province_id: int, _actor: AuthenticatedUser = Depends(transporter),
              service: TransportService = Depends(get_service)):
     with http_errors():
-        return service.mi_recorrido(date, province_id)
+        route = service.mi_recorrido(date, province_id)
+    settings = get_settings()
+    return {**route, "central_lab": {"address": settings.central_lab_address,
+                                     "latitude": settings.central_lab_latitude,
+                                     "longitude": settings.central_lab_longitude}}
 
 
 @router.post("/daily-routes/{route_id}/stops/{stop_id}/pickup", response_model=PickupReceipt)
