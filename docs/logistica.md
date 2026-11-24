@@ -171,36 +171,23 @@ permisos) y `front/tests/turnos-dia-extraccion.test.mjs`. Detalles y pendientes 
 
 ## Clientes del envío a Corea (T06a)
 
-**PROVISORIO para la demo:** en T06 estos endpoints se reemplazan por el flujo del lote
-(CSV, autorización del Ministerio, día hábil de 9 a 18 y estado `awaiting_pickup`).
+Los usa el envío del lote ([T06](#envío-internacional-t06)); los endpoints provisorios
+`/api/shipments/pickups` se borraron en T06.
 
-| Método y ruta | Rol | Función |
-| --- | --- | --- |
-| POST /api/shipments/pickups | `lab_administrator` | Programa un retiro de FedEx en el Laboratorio Central. Cuerpo `{"scheduled_at": "2026-12-15T15:00:00-03:00"}`; responde **201** `{"pickup_id": "<uuid>"}` |
-| GET /api/shipments/pickups/{pickup_id} | `lab_administrator` | Consulta el retiro en FedEx; responde `{"pickup_id", "status"}` con `status` `PROGRAMADO` o `RETIRADO` |
-
-- `scheduled_at` lleva zona horaria (`Z` u offset). Se le manda a FedEx en hora argentina
-  sin zona (`logistics.TIMEZONE`), como pide su contrato.
-- El lugar es `CENTRAL_LAB_ADDRESS` (por defecto "Laboratorio Central, Calle 62 N° 555, La Plata").
-
-Errores:
-
-| Caso | Respuesta |
-| --- | --- |
-| Fecha sin zona horaria, fecha pasada o igual a ahora, `pickup_id` que no es UUID | 422 (la fecha pasada se rechaza **sin llamar a FedEx**) |
-| FedEx responde 400, 401, 404 o 5xx, tarda más de 5 s, no contesta o responde algo mal formado | 502 con el motivo en español (incluye el `error` de FedEx si viene) |
-| Falta `FEDEX_URL`, `FEDEX_USER` o `FEDEX_PASS` | 502 "FedEx no está configurado." |
-| Sin token / otro rol | 401 / 403 |
+- `FedExClient` manda `scheduled_at` a FedEx en hora argentina sin zona (`logistics.TIMEZONE`),
+  como pide su contrato. El lugar es `CENTRAL_LAB_ADDRESS` (por defecto "Laboratorio Central,
+  Calle 62 N° 555, La Plata").
+- Si FedEx responde 400, 401, 404 o 5xx, tarda más de 5 s, no contesta o responde algo mal
+  formado, el cliente lanza un error con el motivo en español (incluye el `error` de FedEx si viene).
 
 Configuración en `back/.env` (nunca en el repo): `FEDEX_URL` (URL base del módulo 10),
 `FEDEX_USER` y `FEDEX_PASS` (credenciales del grupo, Basic Auth).
 
 El Ministerio de Salud no tiene endpoint: `SimulatedHealthMinistry` (SIMULADO) siempre
-autoriza y devuelve un PDF con las filas del CSV. Lo usa T06.
+autoriza y devuelve un PDF con las filas del CSV.
 
-Pruebas: `back/tests/test_shipment_clients.py` (doble de `Courier`, reloj fijo y
-`httpx.MockTransport`; no salen a internet). Detalles en la
-[decisión 012](decisiones/012-clientes-envio.md).
+Pruebas: `back/tests/test_shipment_clients.py` (`httpx.MockTransport`; no salen a internet).
+Detalles en la [decisión 012](decisiones/012-clientes-envio.md).
 
 ## Extracción y remuestreo (T03)
 
@@ -550,4 +537,62 @@ la API, `front/tests/lotes-setup.mjs`). Pompe no está en el seeder (solo carga 
 
 ## Envío internacional (T06)
 
-Pendiente: la completa T06 (decisión 019).
+Cuando el armado de lotes (T05) cierra un lote, el enganche `al_cerrar_lote` arma el CSV, pide la
+autorización al Ministerio de Salud (SIMULADO) y guarda los dos archivos. Después el administrativo
+programa el retiro de FedEx y consulta su estado. Detalles en la
+[decisión 019](decisiones/019-envio-internacional.md).
+
+| Método y ruta | Función |
+| --- | --- |
+| GET /api/shipments/{sample_set_id} | Estado del envío del lote |
+| POST /api/shipments/{sample_set_id}/authorization | Reintenta la autorización del Ministerio |
+| GET /api/shipments/{sample_set_id}/csv | Descarga el CSV (`lote-<id>.csv`) |
+| GET /api/shipments/{sample_set_id}/authorization.pdf | Descarga el PDF (`lote-<id>-autorizacion.pdf`) |
+| POST /api/shipments/{sample_set_id}/pickup | Programa el retiro. Cuerpo `{"scheduled_at": "2026-12-02T10:00:00-03:00"}` |
+| POST /api/shipments/{sample_set_id}/refresh | Consulta FedEx; con `RETIRADO`, pasa el lote al viaje |
+
+Todos son del rol `lab_administrator`. El GET y los POST responden lo mismo:
+
+```json
+{"id": 1, "status": "awaiting_pickup", "has_csv": true, "has_authorization": true,
+ "pickup_at": "2026-12-02T10:00:00-03:00", "courier_pickup_id": "<uuid de FedEx>"}
+```
+
+- **CSV**: `dni,apellido,nombre,codigo_estudio,id_muestra`, una fila por muestra del lote, en el
+  orden de sus lugares. Los datos del paciente salen de su repositorio.
+- **Ministerio caído al cerrar**: el cierre no falla; el lote queda `closed` sin PDF y se reintenta
+  con `POST .../authorization`. El PDF queda asociado a cada estudio a través de `sample_set_items`.
+- **Retiro**: día hábil, desde las 9 y antes de las 18 (hora argentina), sin feriados de la tabla
+  `holidays`. FedEx retira en `CENTRAL_LAB_ADDRESS`. El lote pasa a `awaiting_pickup`.
+- **Consulta**: `PROGRAMADO` no cambia nada. `RETIRADO` pasa el lote y sus muestras a
+  `in_transit_to_sequencing_lab` y cada estudio a `en_viaje_a_corea` (estado de Tomás, sin
+  renombrar todavía). Consultar un lote ya en viaje no vuelve a llamar a FedEx ni repite nada.
+
+Errores:
+
+| Caso | Respuesta |
+| --- | --- |
+| Lote inexistente, archivo todavía no generado | 404 |
+| Ya autorizado, lote armándose, retiro sin autorización, retiro ya programado, consulta sin retiro, otro pedido lo cambió antes | 409 |
+| Fecha sin zona horaria, pasada, fuera de horario, fin de semana o feriado | 422 |
+| El Ministerio o FedEx fallan, no se pudo guardar el CSV o el PDF, o falta `FEDEX_URL`, `FEDEX_USER` o `FEDEX_PASS` | 502 (el lote no cambia) |
+| Sin token / otro rol | 401 / 403 |
+
+Configuración: `SHIPMENT_FILES_DIR`, la carpeta del CSV y el PDF, fuera del repo. Vacío o sin
+definir: `~/exoma-care-archivos`. En el lote se guarda solo el nombre del archivo.
+
+FedEx no avisa cuando retira y no hay cron. Para la demo se consulta con el botón "Actualizar
+estado" del lote o con el comando (desde `back/`):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.consultar_retiros
+```
+
+Recorre los lotes `awaiting_pickup` y consulta cada uno. Sus eventos de muestra quedan sin usuario.
+
+Pantalla: el bloque "Envío" del detalle del lote (`/administrativo/lotes/:id`,
+`front/src/features/logistica/lotes/EnvioLote.jsx`) muestra el estado y la autorización, y deja
+pedir la autorización, descargar el CSV y el PDF, programar el retiro y actualizar el estado.
+
+Pruebas: `back/tests/test_shipments_api.py` (FedEx con un doble, archivos en una carpeta temporal)
+y `front/tests/envio-lote.test.mjs`.
