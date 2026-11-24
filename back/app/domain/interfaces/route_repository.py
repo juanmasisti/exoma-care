@@ -18,7 +18,8 @@ class RouteRepository(Protocol):
     def centers_with_ready_samples(self) -> dict[int, list[int]]: ...
     # Órdenes del día con su provincia y avance: {id, date, province_id, province, status, arrived_at, stops, picked_up}.
     def routes_for_day(self, day: date) -> list[dict]: ...
-    # Orden con provincia y paradas en secuencia, cada una con su centro y sus muestras (sample_ids, sample_codes):
+    # Orden con provincia y paradas en secuencia, cada una con su centro (con coordenadas) y sus muestras
+    # (sample_ids, sample_codes y samples con código, volumen y hora de extracción):
     # antes del retiro, las listas del centro; después, las retiradas.
     def route_detail(self, route_id: int) -> dict | None: ...
     # Condicionales: False si otro pedido ya retiró la parada o registró la llegada.

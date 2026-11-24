@@ -14,16 +14,18 @@ export const fake = {}
 export const MONDAY_9 = new Date('2026-11-02T09:00:00-03:00').getTime()
 export const labAdmin = { access_token: 'test-token', role: 'lab_administrator', rol: 'Administrativo' }
 export const patient = { ...labAdmin, role: 'patient', rol: 'Paciente' }
-export const provinces = [{ id: 1, name: 'Buenos Aires', active_centers: 3 }, { id: 2, name: 'Córdoba', active_centers: 1 }]
 
-const center = (id, number) => ({ id, name: `Centro DEMO ${number}`, address: `Calle DEMO ${number}`, city: 'La Plata' })
+const center = (id, number) => ({ id, name: `Centro DEMO ${number}`, address: `Calle DEMO ${number}`, city: 'La Plata',
+  latitude: -34.9 - number / 100, longitude: -57.95 })
+// Muestras de la parada como las devuelve el back; la de EST-000002 es de un aviso viejo sin hora de extracción.
+const stop = (id, sequence, centerId, number, codes) => ({ id, sequence, center: center(centerId, number), picked_up_at: null,
+  sample_codes: codes, samples: codes.map((code) => ({ code, volume_ml: '4.00', taken_at: code === 'EST-000002' ? null : '2026-10-30T09:30:00-03:00' })) })
 // Orden de Buenos Aires como la devuelve el back: paradas en la secuencia de la API de recorridos.
 export function buenosAiresRoute() {
   return { id: 7, date: '2026-11-02', province_id: 1, province: 'Buenos Aires', status: 'pending', arrived_at: null,
-    stops: [{ id: 71, sequence: 1, center: center(13, 3), picked_up_at: null, sample_codes: ['EST-000004'] },
-      { id: 72, sequence: 2, center: center(12, 2), picked_up_at: null, sample_codes: ['EST-000003'] },
-      { id: 73, sequence: 3, center: center(11, 1), picked_up_at: null, sample_codes: ['EST-000001', 'EST-000002'] }],
-    next_stop_id: 71, on_board: [] }
+    stops: [stop(71, 1, 13, 3, ['EST-000004']), stop(72, 2, 12, 2, ['EST-000003']), stop(73, 3, 11, 1, ['EST-000001', 'EST-000002'])],
+    next_stop_id: 71, on_board: [],
+    central_lab: { address: 'Laboratorio Central, Calle 62 N° 555, La Plata', latitude: -34.921559, longitude: -57.938362 } }
 }
 export const summary = (route) => ({ id: route.id, date: route.date, province_id: route.province_id, province: route.province,
   status: route.status, arrived_at: route.arrived_at, stops: route.stops.length,
@@ -70,7 +72,8 @@ after(async () => { await server?.close() })
 
 beforeEach(() => {
   dom = new Window({ url: 'http://localhost:5173/' })
-  globalThis.window = dom; globalThis.document = dom.document; globalThis.HTMLElement = dom.HTMLElement
+  // Element: el divIcon de leaflet (mapa del recorrido) lo usa como en el navegador.
+  globalThis.window = dom; globalThis.document = dom.document; globalThis.HTMLElement = dom.HTMLElement; globalThis.Element = dom.Element
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
   calls = []
@@ -82,7 +85,8 @@ beforeEach(() => {
     if (fake.networkDown) throw new AxiosError('Network Error', 'ERR_NETWORK', config)
     const url = config.url
     if (url.startsWith('/demo/')) throw failure(config, 404, 'Not Found')
-    if (url === '/provinces') return ok(config, provinces)
+    // Como el back: /provinces es del turnero y solo lo puede usar el paciente.
+    if (url === '/provinces') throw failure(config, 403, 'Tu rol no permite esta operación.')
     if (url === '/transport/daily-routes' && config.method === 'get') return ok(config, fake.routes[config.params.date] ?? [])
     if (url === '/transport/daily-routes' && config.method === 'post') {
       if (fake.generateError) throw failure(config, fake.generateError[0], fake.generateError[1])

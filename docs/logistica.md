@@ -462,7 +462,7 @@ en la [decisión 017](decisiones/017-orden-del-dia.md).
 | --- | --- | --- |
 | `POST /api/transport/daily-routes` `{"date": "2026-11-02"}` | `lab_administrator` | 201 si creó alguna orden, 200 si ya estaban todas (no toca las existentes). Lista de órdenes del día |
 | `GET /api/transport/daily-routes?date=` | `lab_administrator` | órdenes del día: `province`, `status`, `stops` y `picked_up` (avance) |
-| `GET /api/transport/my-route?date=&province_id=` | `TRANSPORT_ROLES` | orden con `province`, `stops` en secuencia (centro, `picked_up_at`, `sample_codes`), `next_stop_id` y `on_board`. `province_id` es PROVISORIO |
+| `GET /api/transport/my-route?date=&province_id=` | `TRANSPORT_ROLES` | orden con `province`, `stops` en secuencia (centro con `latitude`/`longitude`, `picked_up_at`, `sample_codes` y `samples`: `code`, `volume_ml` (decimal como texto, como `"4.00"`) y `taken_at` del aviso, `null` si no vino; sin datos del paciente), `next_stop_id`, `on_board` y `central_lab` (`address`, `latitude`, `longitude` de la configuración) para el mapa. `province_id` es PROVISORIO |
 | `POST /api/transport/daily-routes/{id}/stops/{stop_id}/pickup` | `TRANSPORT_ROLES` | comprobante: `center`, `picked_up_at` y `sample_codes` retirados |
 | `POST /api/transport/daily-routes/{id}/arrival` | `TRANSPORT_ROLES` | `arrived_at` y `received_codes`. Llama a `SampleSetAssigner.asignar_a_sample_set` por cada muestra |
 
