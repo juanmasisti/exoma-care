@@ -20,6 +20,10 @@ class SetFull(Exception):
     """El lugar pedido está fuera de 1..10: el lote no tiene más lugar, hay que abrir otro."""
 
 
+class SetNotAssembling(Exception):
+    """El lote ya no se está armando (lo cerró otro pedido o no existe): un lote cerrado no cambia."""
+
+
 class SampleSetRepository(Protocol):
     # Lote con sus muestras: {id, status, is_urgent, created_at, closed_at, items: [{slot, sample_id}]}.
     def get(self, sample_set_id: int) -> dict | None: ...

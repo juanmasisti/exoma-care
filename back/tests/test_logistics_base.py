@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.entities.logistics import SampleSetStatus, SampleStatus
 from app.domain.interfaces.route_repository import RouteAlreadyExists
-from app.domain.interfaces.sample_set_repository import AssemblingSetExists, SampleAlreadyInSet, SetFull, SlotTaken
+from app.domain.interfaces.sample_set_repository import AssemblingSetExists, SampleAlreadyInSet, SetFull, SetNotAssembling, SlotTaken
 from app.infrastructure.database.logistics_models import SampleSetModel
 from app.infrastructure.repositories.sqlalchemy_route_repository import SQLAlchemyRouteRepository
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
@@ -182,6 +182,26 @@ def test_a_set_closed_by_another_request_is_not_closed_again_and_the_session_kee
         sample_sets.commit()  # lo demás del pedido se guarda
         assert session.scalar(text("SELECT status FROM samples WHERE id = 1")) == "with_transporter"
         assert loaded.status == "assembling"  # el lote quedó como lo dejó el otro pedido
+
+
+def test_a_closed_set_does_not_take_more_samples_even_if_it_was_read_while_assembling(engine):
+    with Session(engine, expire_on_commit=False) as session:
+        sample_sets = SQLAlchemySampleSetRepository(session)
+        sample_set_id = sample_sets.open_set(False, NOW)
+        sample_sets.add_item(sample_set_id, 1, 1)
+        sample_sets.commit()
+        assert sample_sets.assembling()["id"] == sample_set_id  # la llegada lo leyó armándose
+        session.commit()
+        # Otro pedido (un Pompe urgente) lo cierra antes de que la llegada sume su muestra.
+        with engine.begin() as other:
+            other.execute(text("UPDATE sample_sets SET status = 'closed', version = version + 1 WHERE id = :id"),
+                          {"id": sample_set_id})
+        with pytest.raises(SetNotAssembling):
+            sample_sets.add_item(sample_set_id, 2, 2)
+        with pytest.raises(SetNotAssembling):
+            sample_sets.add_item(999, 2, 1)  # lote inexistente
+        sample_sets.commit()
+        assert [item["sample_id"] for item in sample_sets.get(sample_set_id)["items"]] == [1]
 
 
 def test_close_only_closes_an_assembling_set_and_marks_it_urgent(engine):

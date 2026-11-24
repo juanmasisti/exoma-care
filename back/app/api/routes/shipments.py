@@ -9,10 +9,23 @@ from app.api.routes.extraction_centers import get_clock
 from app.config import get_settings
 from app.domain.entities.user import AuthenticatedUser
 from app.domain.interfaces.courier import Courier, CourierError, PickupStatus
+from app.domain.interfaces.sample_set_hooks import SampleSetClosedHandler
 from app.infrastructure.adapters.fedex_client import FedExClient
 
 # PROVISORIO para la demo (decisión 012): en T06 se reemplaza por el flujo del lote.
 router = APIRouter(prefix="/api/shipments", tags=["envíos"])
+
+
+class PendingSampleSetClosedHandler:
+    """PROVISORIO hasta T06: cerrar un lote no pide la autorización todavía."""
+
+    def al_cerrar_lote(self, sample_set_id: int, now: datetime) -> None:
+        pass
+
+
+# Enganche que usa el armado de lotes (T05) con Depends; lo implementa T06 acá mismo.
+def get_sample_set_closed_handler() -> SampleSetClosedHandler:
+    return PendingSampleSetClosedHandler()
 
 
 def get_courier() -> Courier:

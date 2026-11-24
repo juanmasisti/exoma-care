@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import insert, literal, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.domain.entities.logistics import SAMPLE_SET_SIZE, SampleSetStatus
 from app.domain.interfaces.sample_set_repository import (
-    AssemblingSetExists, SampleAlreadyInSet, SetFull, SlotTaken,
+    AssemblingSetExists, SampleAlreadyInSet, SetFull, SetNotAssembling, SlotTaken,
 )
 from app.infrastructure.database.logistics_models import SampleSetItemModel, SampleSetModel
 
@@ -41,16 +41,24 @@ class SQLAlchemySampleSetRepository:
     def add_item(self, sample_set_id: int, sample_id: int, slot: int) -> None:
         if not 1 <= slot <= SAMPLE_SET_SIZE:
             raise SetFull()
+        # INSERT condicional: solo entra si el lote sigue armándose al escribir, así un cierre que ganó
+        # antes (por ejemplo un Pompe urgente) no deja sumar muestras a un lote cerrado.
+        assembling = (select(SampleSetModel.id).where(SampleSetModel.id == sample_set_id,
+                                                      SampleSetModel.status == SampleSetStatus.ASSEMBLING.value)
+                      .exists())
+        row = select(literal(sample_set_id), literal(sample_id), literal(slot)).where(assembling)
         try:
             with self.session.begin_nested():
-                self.session.add(SampleSetItemModel(sample_set_id=sample_set_id, sample_id=sample_id, slot=slot))
-                self.session.flush()
+                result = self.session.execute(insert(SampleSetItemModel)
+                                              .from_select(["sample_set_id", "sample_id", "slot"], row))
         except IntegrityError:
             if self._exists(SampleSetItemModel.sample_id == sample_id):
                 raise SampleAlreadyInSet() from None
             if self._exists(SampleSetItemModel.sample_set_id == sample_set_id, SampleSetItemModel.slot == slot):
                 raise SlotTaken() from None
             raise  # otro error (lote o muestra inexistente): no es un choque de lugar
+        if result.rowcount == 0:
+            raise SetNotAssembling()
 
     def _exists(self, *where) -> bool:
         return self.session.scalar(select(select(SampleSetItemModel.id).where(*where).exists()))
