@@ -4,6 +4,8 @@ Reglas:
 - La cobertura de la obra social se paga primero; el paciente abona el resto como si fuera
   particular. El cupón se aplica solo sobre lo que paga el paciente.
 - Solo un estudio pagado o autorizado habilita el turno (ENABLED_STUDY_STATUSES).
+- Reanálisis (EC-14): sin cupones; al quedar pago o cubierto pasa directo a bioinformática.
+- Al habilitarse el estudio se avisa por mail, después de confirmar y sin romper el pago.
 - Pagar es una operación única por presupuesto: la reserva en el registro financiero
   (UNIQUE) hace de candado frente a pedidos simultáneos.
 """
@@ -28,12 +30,14 @@ from app.domain.entities.study_request import (
 from app.domain.entities.user import AuthenticatedUser
 from app.domain.interfaces.coupon_gateway import CouponGateway
 from app.domain.interfaces.insurance_gateway import InsuranceGateway
+from app.domain.interfaces.study_notifier import StudyNotifier
 from app.domain.interfaces.study_request_repository import (
     DuplicateOperationError,
     StudyRequestRepository,
 )
 from app.infrastructure.external_services.errors import ExternalServiceError
 from app.use_cases.coupons import patient_ref
+from app.use_cases.study_notifications import NoStudyNotifications, notify
 from app.use_cases.study_request_errors import StudyRequestConflictError
 from app.use_cases.study_request_views import (
     ensure_patient_owner,
@@ -43,6 +47,7 @@ from app.use_cases.study_request_views import (
 MAX_DEMAND_BYTES = 5 * 1024 * 1024  # límite de la API de obras sociales
 MAX_REJECTION_REASON_LENGTH = 500
 COUPON_REJECTED_STATUSES = frozenset({400, 404})  # 409 = ya usado
+REANALYSIS_COUPON_MESSAGE = "Los cupones no se aplican a los reanálisis."
 
 
 def _clean_percent(value: Decimal) -> int | float:
@@ -65,12 +70,14 @@ class StudyPaymentService:
         *,
         today: Callable[[], date] = date.today,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        notifier: StudyNotifier | None = None,
     ):
         self._repo = repo
         self._insurance = insurance
         self._coupons = coupons
         self._today = today
         self._now = now
+        self._notifier = notifier or NoStudyNotifications()
 
     # --- Obras sociales (listado para el selector) ---
 
@@ -222,12 +229,13 @@ class StudyPaymentService:
                 raise StudyRequestConflictError(
                     "La cobertura de este estudio ya está registrada."
                 ) from exc
-        self._transition(
-            study_id,
-            StudyStatus.PENDING_AUTHORIZATION,
-            status_after_authorization(split.patient_gross_cents),
+        new_status = status_after_authorization(
+            split.patient_gross_cents, reanalysis=study.is_reanalysis
         )
+        self._transition(study_id, StudyStatus.PENDING_AUTHORIZATION, new_status)
         self._repo.commit()
+        if new_status != StudyStatus.PENDING_PAYMENT:
+            await notify(self._notifier.estudio_habilitado, self._study(study_id))
         return self._detail(study_id)
 
     async def rechazar_cobertura(
@@ -329,6 +337,8 @@ class StudyPaymentService:
             raise StudyRequestConflictError("Todavía no está definido el importe a pagar.")
 
         code = (coupon_code or "").strip() or None
+        if code is not None and study.is_reanalysis:
+            raise ValueError(REANALYSIS_COUPON_MESSAGE)
         coupon = None
         if code is not None:
             coupon = self._repo.get_coupon(code)
@@ -397,9 +407,12 @@ class StudyPaymentService:
         self._transition(
             study_id,
             StudyStatus.PENDING_PAYMENT,
-            status_after_patient_payment(budget.payment_mode),
+            status_after_patient_payment(
+                budget.payment_mode, reanalysis=study.is_reanalysis
+            ),
         )
         self._repo.commit()
+        await notify(self._notifier.estudio_habilitado, self._study(study_id))
         return self._detail(study_id)
 
     # --- Internos ---

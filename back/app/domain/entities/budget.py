@@ -31,6 +31,10 @@ def combine_genes(*groups: Iterable[str]) -> tuple[str, ...]:
     return tuple(seen)
 
 
+# Reanálisis (EC-14): mismo cálculo que un estudio nuevo con un 30 % de descuento.
+REANALYSIS_DISCOUNT_PERCENT = 30
+
+
 @dataclass(frozen=True, slots=True)
 class Budget:
     gene_count: int
@@ -86,6 +90,11 @@ def _percent_of(cents: int, percent: Decimal) -> int:
             Decimal(1), rounding=ROUND_HALF_UP
         )
     )
+
+
+def reanalysis_discount_cents(gross_cents: int) -> int:
+    """Descuento del reanálisis sobre el precio de lista (base + genes adicionales)."""
+    return _percent_of(gross_cents, Decimal(REANALYSIS_DISCOUNT_PERCENT))
 
 
 @dataclass(frozen=True, slots=True)

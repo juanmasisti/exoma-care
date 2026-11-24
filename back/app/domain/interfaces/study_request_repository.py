@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Protocol
 
+from app.domain.entities.roles import UserRole
 from app.domain.entities.study import StudyStatus
 from app.domain.entities.study_request import (
     Coupon,
@@ -35,6 +36,16 @@ class StudyRequestRepository(Protocol):
     def user_id_for_patient(self, patient_id: int) -> int | None: ...
     def physician_exists(self, user_id: int) -> bool: ...
     def list_physicians(self) -> list[dict[str, Any]]: ...
+    def patient_physician_id(self, patient_id: int) -> int | None:
+        """Médico que dio de alta al paciente (para estudios previos sin médico solicitante)."""
+        ...
+
+    # Destinatarios de avisos por mail
+    def patient_email(self, patient_id: int) -> str | None:
+        """Mail de la cuenta del paciente; si no tiene cuenta, el de su ficha."""
+        ...
+    def user_email(self, user_id: int) -> str | None: ...
+    def emails_for_role(self, role: UserRole) -> list[str]: ...
 
     # Solicitudes de estudio
     def create_study(
@@ -45,12 +56,16 @@ class StudyRequestRepository(Protocol):
         include_secondary_findings: bool,
         pathologies: Sequence[PathologyRef],
         genes: Sequence[GeneRef],
+        original_study_id: int | None = None,
     ) -> StudyRequest: ...
     def get_study(self, study_id: int) -> StudyRequest | None: ...
     def get_bioinformatics_result(self, study_id: int) -> dict[str, Any] | None: ...
     def list_studies(
         self, *, physician_id: int | None = None, patient_id: int | None = None
     ) -> list[StudyRequest]: ...
+    def list_reanalyses(self, study_id: int) -> list[StudyRequest]:
+        """Reanálisis pedidos directamente sobre el estudio (EC-14)."""
+        ...
     def transition_status(
         self, study_id: int, expected: StudyStatus, new: StudyStatus
     ) -> bool:
@@ -69,6 +84,7 @@ class StudyRequestRepository(Protocol):
         total_cents: int,
         currency: str,
         issued_by_user_id: int,
+        discount_cents: int = 0,
     ) -> StudyBudget: ...
     def get_budget(self, study_id: int) -> StudyBudget | None: ...
     def update_budget(self, budget_id: int, **fields: Any) -> None:

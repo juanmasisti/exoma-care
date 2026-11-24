@@ -111,6 +111,36 @@ class SqlAlchemyStudyRequestRepository:
             for user in rows
         ]
 
+    def patient_physician_id(self, patient_id: int) -> int | None:
+        return self._session.scalar(
+            select(Paciente.created_by_physician_id).where(Paciente.id == patient_id)
+        )
+
+    # --- Destinatarios de avisos ---
+
+    def patient_email(self, patient_id: int) -> str | None:
+        row = self._session.execute(
+            select(Paciente.email, Usuario.email)
+            .outerjoin(Usuario, Usuario.id == Paciente.usuario_id)
+            .where(Paciente.id == patient_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        record_email, account_email = row
+        return account_email or record_email or None
+
+    def user_email(self, user_id: int) -> str | None:
+        return self._session.scalar(select(Usuario.email).where(Usuario.id == user_id))
+
+    def emails_for_role(self, role: UserRole) -> list[str]:
+        return [
+            email
+            for email in self._session.scalars(
+                select(Usuario.email).where(Usuario.role == role).order_by(Usuario.id)
+            )
+            if email
+        ]
+
     # --- Solicitudes de estudio ---
 
     def create_study(
@@ -121,12 +151,14 @@ class SqlAlchemyStudyRequestRepository:
         include_secondary_findings: bool,
         pathologies: Sequence[PathologyRef],
         genes: Sequence[GeneRef],
+        original_study_id: int | None = None,
     ) -> StudyRequest:
         study = StudyModel(
             patient_id=patient_id,
             physician_id=physician_id,
             status=StudyStatus.CREATED,
             include_secondary_findings=include_secondary_findings,
+            original_study_id=original_study_id,
         )
         self._session.add(study)
         self._session.flush()
@@ -180,6 +212,15 @@ class SqlAlchemyStudyRequestRepository:
         ).scalars()
         return [self._study(study) for study in rows]
 
+    def list_reanalyses(self, study_id: int) -> list[StudyRequest]:
+        rows = self._session.execute(
+            select(StudyModel)
+            .where(StudyModel.original_study_id == study_id)
+            .order_by(StudyModel.id)
+            .execution_options(**_FRESH)
+        ).scalars()
+        return [self._study(study) for study in rows]
+
     def transition_status(
         self, study_id: int, expected: StudyStatus, new: StudyStatus
     ) -> bool:
@@ -213,6 +254,7 @@ class SqlAlchemyStudyRequestRepository:
             created_at=study.created_at,
             pathologies=tuple(PathologyRef(p.code, p.name) for p in pathologies),
             genes=tuple(GeneRef(g.symbol, g.origin) for g in genes),
+            original_study_id=study.original_study_id,
         )
 
     # --- Presupuesto ---
@@ -228,6 +270,7 @@ class SqlAlchemyStudyRequestRepository:
         total_cents: int,
         currency: str,
         issued_by_user_id: int,
+        discount_cents: int = 0,
     ) -> StudyBudget:
         budget = StudyBudgetModel(
             study_id=study_id,
@@ -238,6 +281,7 @@ class SqlAlchemyStudyRequestRepository:
             total_cents=total_cents,
             currency=currency,
             issued_by_user_id=issued_by_user_id,
+            discount_cents=discount_cents,
         )
         self._session.add(budget)
         self._session.flush()
@@ -278,6 +322,7 @@ class SqlAlchemyStudyRequestRepository:
             coverage_percent=model.coverage_percent,
             insurer_cents=model.insurer_cents,
             patient_cents=model.patient_cents,
+            discount_cents=model.discount_cents or 0,
         )
 
     # --- Cobertura ---
