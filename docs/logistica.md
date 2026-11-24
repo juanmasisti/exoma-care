@@ -481,7 +481,38 @@ Pendiente: la completa T04 (decisión 017).
 
 ## Sample sets (T05)
 
-Pendiente: la completa T05 (decisión 018).
+Arma los lotes de 10 muestras solo, al registrar la llegada, y los cierra antes si llega un Pompe
+urgente. Detalles en la [decisión 018](decisiones/018-sample-sets.md).
+
+- **Armado** (`SampleSetService.asignar_a_sample_set`, en `back/app/use_cases/sample_sets.py`): la
+  llegada (T04, cuando se una) lo va a recibir con `Depends(get_sample_set_assigner)` por cada muestra recibida. Pasa la
+  muestra de `received` a `in_sample_set`, la suma al lote `assembling` (o abre uno) en el siguiente
+  lugar libre y, con 10 muestras o un Pompe urgente, cierra el lote y llama una sola vez a
+  `al_cerrar_lote` (T06). No confirma nada: el commit lo hace la llegada.
+- **Choques, sin `FOR UPDATE`**: lugar tomado → prueba el siguiente; lote lleno o cerrado por otro
+  pedido → relee y, si hace falta, abre otro; lote abierto a la vez por otro pedido → usa ese. Con
+  cinco relecturas seguidas falla y se deshace la llegada entera (un lugar tomado no cuenta).
+- **Pompe urgente**: un estudio con la patología de código `POMPE` (sin distinguir mayúsculas) y un
+  paciente menor de 4 meses **al alta del estudio** (propuesta). Sin fecha de nacimiento no es
+  urgente (propuesta). Se cierra el lote armándose con lo que tenga o, si no hay, sale un lote de 1.
+  `SampleSetService.es_pompe_urgente(study_id)` queda para bioinformática (sin endpoint).
+
+| Método | Ruta | Rol | Respuesta |
+| --- | --- | --- | --- |
+| GET | `/api/sample-sets?status=` | `lab_administrator` | Lotes (todos sin `status`), del más nuevo al más viejo: `id`, `status`, `is_urgent`, `created_at`, `closed_at`, `sample_count` |
+| GET | `/api/sample-sets/{id}` | `lab_administrator` | Lo mismo sin `sample_count` y con `samples`: `slot`, `sample_id`, `study_code`. Sin datos del paciente. 404 si no existe |
+
+`status` es `assembling`, `closed`, `awaiting_pickup` o `in_transit_to_sequencing_lab`; otro valor
+da 422. Las fechas salen en hora de Argentina.
+
+**Pantallas** (`front/src/features/logistica/lotes/`): `/administrativo/lotes` lista los lotes por
+estado (Armándose, Cerrados, Esperando retiro, En viaje), con la pestaña en la URL
+(`?estado=closed`). `/administrativo/lotes/:id` muestra estado, urgencia, fechas y los lugares con
+el código de estudio, y debajo el envío de T06 (`<EnvioLote session sampleSetId onChange />`, que
+recarga el lote).
+
+Pruebas: `back/tests/test_sample_sets_api.py` y `front/tests/lotes.test.mjs` (con su propio doble de
+la API, `front/tests/lotes-setup.mjs`). Pompe no está en el seeder (solo carga Fabry): se prueba ahí.
 
 ## Envío internacional (T06)
 
