@@ -41,7 +41,7 @@ export function tracking(stage='extraction', samples=[], status='turno_sacado') 
 // Muestra descartada: nace descartada por volumen o, con `reason`, la descarta bioinformática después.
 export function discardedSample(reason=null) {
   const born = { from_status: null, to_status: reason ? 'ready_for_pickup' : 'discarded', reason: null, at: '2026-11-04T09:20:00-03:00' }
-  const events = reason ? [born, { from_status: 'in_transit_to_korea', to_status: 'discarded', reason, at: '2026-11-20T11:00:00-03:00' }] : [born]
+  const events = reason ? [born, { from_status: 'in_transit_to_sequencing_lab', to_status: 'discarded', reason, at: '2026-11-20T11:00:00-03:00' }] : [born]
   return { id: 1, volume_ml: reason ? '2.50' : '1.90', status: 'discarded', is_current: false, events }
 }
 

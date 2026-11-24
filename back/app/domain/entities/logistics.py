@@ -1,4 +1,5 @@
-"""Reglas puras de logística: días hábiles, feriados fijos, horarios, estados de turnos y de muestras."""
+"""Reglas puras de logística: días hábiles, feriados, horarios y estados de turnos, muestras, recorridos y lotes."""
+import calendar
 import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -119,17 +120,18 @@ class SampleStatus(str, Enum):
     WITH_TRANSPORTER = "with_transporter"
     RECEIVED = "received"
     IN_SAMPLE_SET = "in_sample_set"
-    IN_TRANSIT_TO_KOREA = "in_transit_to_korea"
+    IN_TRANSIT_TO_SEQUENCING_LAB = "in_transit_to_sequencing_lab"
     DISCARDED = "discarded"
 
 
-# En orden; se descarta para remuestrear desde lista para retirar, recibida o en viaje a Corea.
+# En orden; se descarta para remuestrear desde lista para retirar, recibida o en viaje al laboratorio
+# de secuenciación. Cuando se defina el estado de la vuelta del resultado, se suma al enum y acá.
 SAMPLE_TRANSITIONS = {
     SampleStatus.READY_FOR_PICKUP: {SampleStatus.WITH_TRANSPORTER, SampleStatus.DISCARDED},
     SampleStatus.WITH_TRANSPORTER: {SampleStatus.RECEIVED},
     SampleStatus.RECEIVED: {SampleStatus.IN_SAMPLE_SET, SampleStatus.DISCARDED},
-    SampleStatus.IN_SAMPLE_SET: {SampleStatus.IN_TRANSIT_TO_KOREA},
-    SampleStatus.IN_TRANSIT_TO_KOREA: {SampleStatus.DISCARDED},
+    SampleStatus.IN_SAMPLE_SET: {SampleStatus.IN_TRANSIT_TO_SEQUENCING_LAB},
+    SampleStatus.IN_TRANSIT_TO_SEQUENCING_LAB: {SampleStatus.DISCARDED},
 }
 
 
@@ -152,3 +154,78 @@ def initial_sample_status(volume_ml: Decimal) -> SampleStatus:
     ready_for_pickup. SAMPLE_TRANSITIONS solo rige los cambios de una muestra que ya existe.
     """
     return SampleStatus.READY_FOR_PICKUP if sample_is_usable(volume_ml) else SampleStatus.DISCARDED
+
+
+class DailyRouteStatus(str, Enum):
+    PENDING = "pending"
+    ARRIVED = "arrived"
+
+
+# La llegada al laboratorio central cierra la orden del día. Cada retiro queda en su parada.
+ROUTE_TRANSITIONS = {DailyRouteStatus.PENDING: {DailyRouteStatus.ARRIVED}}
+
+
+def can_change_route(current: DailyRouteStatus, new: DailyRouteStatus) -> bool:
+    return new in ROUTE_TRANSITIONS.get(current, set())
+
+
+def next_stop_sequence(picked_sequences, total: int) -> int | None:
+    """La primera parada sin retirar: el orden es fijo y no se saltea. None si ya se retiraron todas."""
+    picked = set(picked_sequences)
+    return next((sequence for sequence in range(1, total + 1) if sequence not in picked), None)
+
+
+class SampleSetStatus(str, Enum):
+    ASSEMBLING = "assembling"
+    CLOSED = "closed"
+    AWAITING_PICKUP = "awaiting_pickup"
+    IN_TRANSIT_TO_SEQUENCING_LAB = "in_transit_to_sequencing_lab"
+
+
+# En orden y sin vuelta atrás: un lote cerrado no cambia de muestras.
+SAMPLE_SET_TRANSITIONS = {
+    SampleSetStatus.ASSEMBLING: {SampleSetStatus.CLOSED},
+    SampleSetStatus.CLOSED: {SampleSetStatus.AWAITING_PICKUP},
+    SampleSetStatus.AWAITING_PICKUP: {SampleSetStatus.IN_TRANSIT_TO_SEQUENCING_LAB},
+}
+
+
+def can_change_sample_set(current: SampleSetStatus, new: SampleSetStatus) -> bool:
+    return new in SAMPLE_SET_TRANSITIONS.get(current, set())
+
+
+SAMPLE_SET_SIZE = 10
+
+
+def sample_set_must_close(count: int, has_urgent_pompe: bool) -> bool:
+    """Se cierra con 10 o con un Pompe urgente.
+
+    Con un Pompe urgente sale aunque tenga una sola muestra: propuesta pendiente de confirmar
+    con el profesor (decisión abierta 6 del dominio).
+    """
+    return count >= SAMPLE_SET_SIZE or has_urgent_pompe
+
+
+# Código de la patología en el catálogo (Apigen), no su nombre. El catálogo DEMO usa minúsculas.
+POMPE_PATHOLOGY_CODE = "POMPE"
+URGENT_POMPE_MAX_MONTHS = 4
+
+
+def _add_months(day: date, months: int) -> date:
+    month_index = day.month - 1 + months
+    year, month = day.year + month_index // 12, month_index % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def is_urgent_pompe(pathology_codes, birth_date: date, reference_date: date) -> bool:
+    """Pompe en menor de 4 meses. La fecha de referencia la elige quien llama (decisión abierta 5)."""
+    is_pompe = any(code.upper() == POMPE_PATHOLOGY_CODE for code in pathology_codes)
+    return is_pompe and reference_date < _add_months(birth_date, URGENT_POMPE_MAX_MONTHS)
+
+
+def is_valid_pickup_time(at: datetime, holidays) -> bool:
+    """Retiro de FedEx: día hábil, desde las 9 y antes de las 18 (como los turnos). No mira si es pasado."""
+    if at.tzinfo is None:
+        raise ValueError("La fecha y hora del retiro debe indicar la zona horaria.")
+    local = at.astimezone(TIMEZONE)
+    return is_business_day(local.date(), holidays) and OPENING <= local.time() < CLOSING

@@ -1,12 +1,13 @@
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
 import pytest
 
 from app.domain.entities.logistics import (
-    SAMPLE_TRANSITIONS, TIMEZONE, AppointmentStatus, SampleStatus, _easter, available_slots, can_change_appointment,
-    can_change_sample, daily_slots, fixed_national_holidays, initial_sample_status, is_valid_slot, sample_is_usable,
-    study_code, study_id_from_code,
+    SAMPLE_TRANSITIONS, TIMEZONE, AppointmentStatus, DailyRouteStatus, SampleSetStatus, SampleStatus, _easter,
+    available_slots, can_change_appointment, can_change_route, can_change_sample, can_change_sample_set, daily_slots,
+    fixed_national_holidays, initial_sample_status, is_urgent_pompe, is_valid_pickup_time, is_valid_slot,
+    next_stop_sequence, sample_is_usable, sample_set_must_close, study_code, study_id_from_code,
 )
 
 MONDAY = date(2026, 11, 2)
@@ -113,14 +114,14 @@ def test_being_born_discarded_is_not_a_transition():
 
 def test_sample_moves_forward_in_order():
     path = [SampleStatus.READY_FOR_PICKUP, SampleStatus.WITH_TRANSPORTER, SampleStatus.RECEIVED,
-            SampleStatus.IN_SAMPLE_SET, SampleStatus.IN_TRANSIT_TO_KOREA]
+            SampleStatus.IN_SAMPLE_SET, SampleStatus.IN_TRANSIT_TO_SEQUENCING_LAB]
     assert all(can_change_sample(current, new) for current, new in zip(path, path[1:]))
     assert not can_change_sample(SampleStatus.RECEIVED, SampleStatus.WITH_TRANSPORTER)
     assert not can_change_sample(SampleStatus.READY_FOR_PICKUP, SampleStatus.RECEIVED)
 
 
 def test_sample_is_discarded_only_from_the_remuestreo_states():
-    allowed = {SampleStatus.READY_FOR_PICKUP, SampleStatus.RECEIVED, SampleStatus.IN_TRANSIT_TO_KOREA}
+    allowed = {SampleStatus.READY_FOR_PICKUP, SampleStatus.RECEIVED, SampleStatus.IN_TRANSIT_TO_SEQUENCING_LAB}
     for status in SampleStatus:
         assert can_change_sample(status, SampleStatus.DISCARDED) is (status in allowed)
     assert not any(can_change_sample(SampleStatus.DISCARDED, new) for new in SampleStatus)
@@ -132,3 +133,68 @@ def test_easter_based_holidays_2026():
     assert HOLIDAYS_2026[date(2026, 2, 16)] == "Carnaval"
     assert HOLIDAYS_2026[date(2026, 2, 17)] == "Carnaval"
     assert date(2026, 8, 17) not in HOLIDAYS_2026
+
+
+def test_route_is_closed_by_the_arrival_and_does_not_reopen():
+    assert can_change_route(DailyRouteStatus.PENDING, DailyRouteStatus.ARRIVED)
+    assert not can_change_route(DailyRouteStatus.ARRIVED, DailyRouteStatus.PENDING)
+
+
+@pytest.mark.parametrize("picked, expected", [((), 1), ((1,), 2), ((1, 2), 3), ((1, 2, 3), None), ((2,), 1)])
+def test_next_stop_is_the_first_one_not_picked_up(picked, expected):
+    assert next_stop_sequence(picked, 3) == expected
+
+
+def test_sample_set_moves_forward_in_order_without_going_back():
+    path = list(SampleSetStatus)
+    assert all(can_change_sample_set(current, new) for current, new in zip(path, path[1:]))
+    for index, current in enumerate(path):
+        assert not any(can_change_sample_set(current, previous) for previous in path[:index + 1])
+    assert not can_change_sample_set(SampleSetStatus.ASSEMBLING, SampleSetStatus.AWAITING_PICKUP)
+
+
+@pytest.mark.parametrize("count, urgent, closes", [(9, False, False), (10, False, True), (4, True, True),
+                                                   (1, True, True)])
+def test_sample_set_closes_with_ten_or_an_urgent_pompe(count, urgent, closes):
+    assert sample_set_must_close(count, urgent) is closes
+
+
+BIRTH = date(2026, 6, 30)
+
+
+@pytest.mark.parametrize("codes, reference, urgent", [
+    (["POMPE"], date(2026, 9, 29), True),  # 2 meses y pico
+    (["pompe"], date(2026, 10, 29), True),  # el catálogo DEMO usa minúsculas
+    (["fabry", "POMPE"], date(2026, 10, 29), True),
+    (["POMPE"], date(2026, 10, 30), False),  # cumple 4 meses: ya no es urgente
+    (["POMPE"], date(2026, 12, 1), False),
+    (["fabry"], date(2026, 7, 1), False),
+    (["Enfermedad de Pompe"], date(2026, 7, 1), False),  # el nombre no cuenta, solo el código
+])
+def test_urgent_pompe_by_catalog_code_and_under_four_months(codes, reference, urgent):
+    assert is_urgent_pompe(codes, BIRTH, reference) is urgent
+
+
+def test_four_months_after_the_31st_ends_on_the_last_day_of_the_month():
+    birth = date(2026, 10, 31)  # + 4 meses = 28/2/2027
+    assert is_urgent_pompe(["POMPE"], birth, date(2027, 2, 27))
+    assert not is_urgent_pompe(["POMPE"], birth, date(2027, 2, 28))
+
+
+@pytest.mark.parametrize("at, valid", [
+    (datetime(2026, 11, 2, 9, 0, tzinfo=TIMEZONE), True),
+    (datetime(2026, 11, 2, 17, 59, tzinfo=TIMEZONE), True),
+    (datetime(2026, 11, 2, 8, 59, tzinfo=TIMEZONE), False),
+    (datetime(2026, 11, 2, 18, 0, tzinfo=TIMEZONE), False),
+    (datetime(2026, 10, 31, 10, 0, tzinfo=TIMEZONE), False),  # sábado
+    (datetime(2026, 12, 25, 10, 0, tzinfo=TIMEZONE), False),  # feriado
+])
+def test_pickup_on_business_days_from_9_to_18(at, valid):
+    assert is_valid_pickup_time(at, HOLIDAYS_2026) is valid
+
+
+def test_pickup_time_is_checked_in_argentina_time():
+    # 12:00 UTC son las 9:00 en Buenos Aires.
+    assert is_valid_pickup_time(datetime(2026, 11, 2, 12, 0, tzinfo=UTC), HOLIDAYS_2026)
+    with pytest.raises(ValueError):
+        is_valid_pickup_time(datetime(2026, 11, 2, 12, 0), HOLIDAYS_2026)

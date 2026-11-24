@@ -12,7 +12,7 @@ async function follow(link) { await act(async()=>link.click());await settle() }
 
 for (const [stage, text] of [
   ['extraction', 'Extracción'], ['ready_for_pickup', 'Muestra lista para retirar'], ['to_lab', 'En camino al laboratorio'],
-  ['central_lab', 'En el laboratorio central'], ['to_korea', 'En viaje al laboratorio de análisis'],
+  ['central_lab', 'En el laboratorio central'], ['to_sequencing_lab', 'En viaje al laboratorio de análisis'],
   ['analysis', 'En análisis'], ['result_available', 'Resultado disponible'],
 ]) {
   test(`la etapa ${stage} se muestra como "${text}" y sin botón de turno nuevo`,async()=>{
