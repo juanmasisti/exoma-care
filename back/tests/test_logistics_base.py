@@ -142,7 +142,7 @@ def test_slots_go_from_1_to_10_and_a_sample_belongs_to_one_set(engine):
             sample_sets.add_item(sample_set_id, 11, 11)
         with pytest.raises(SampleAlreadyInSet):
             sample_sets.add_item(sample_set_id, 1, 1)
-        # Los choques no deshacen lo anterior: se deshace solo el savepoint.
+        # Los choques no deshacen lo anterior: el INSERT condicional no escribe nada y la transacción sigue entera.
         sample_sets.commit()
         assert [item["slot"] for item in sample_sets.get(sample_set_id)["items"]] == list(range(1, 11))
 
