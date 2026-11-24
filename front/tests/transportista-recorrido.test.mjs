@@ -1,7 +1,12 @@
 // App del transportista (T04): inicio, orden, retiro por centro y llegada al Laboratorio Central.
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
-import { button, calls, choose, click, container, crumb, fake, go, patient, render, text } from './transportista-setup.mjs'
+import { beforeEach, test } from 'node:test'
+import { button, calls, choose, click, container, crumb, fake, go, patient, render, summary, text } from './transportista-setup.mjs'
+
+// Órdenes ya generadas hoy: de acá salen las provincias del selector. Córdoba no tiene detalle (my-route da 404).
+beforeEach(() => {
+  fake.routes['2026-11-02'] = [summary(fake.route), { ...summary(fake.route), id: 8, province_id: 2, province: 'Córdoba' }]
+})
 
 const link = (label) => {
   const item = [...container.querySelectorAll('main a')].find((a) => a.textContent.trim() === label)
@@ -27,6 +32,22 @@ test('P1: elige la provincia y ve el resumen y el siguiente centro', async () =>
   assert.deepEqual([...container.querySelectorAll('.transporte-kpis li')].map((li) => li.textContent),
     ['3Centros pendientes', '0Centros retirados', '0Muestras a bordo'])
   assert.match(text(), /Siguiente centro.*Parada 1 de 3.*Centro DEMO 3/)
+})
+
+test('P1: las provincias salen de las órdenes de hoy, no del turnero', async () => {
+  await render('/transporte')
+  assert.deepEqual([...container.querySelectorAll('#transporte-province option')].map((o) => o.textContent),
+    ['Elegí tu provincia', 'Buenos Aires', 'Córdoba'])
+  assert.deepEqual(calls[0], { url: '/transport/daily-routes', method: 'get', params: { date: '2026-11-02' }, data: undefined })
+  assert.ok(!calls.some((call) => call.url === '/provinces'))
+  assert.equal(alert(), undefined)
+})
+
+test('P1: sin órdenes generadas hoy lo dice', async () => {
+  fake.routes = {}
+  await render('/transporte')
+  assert.match(text(), /Hoy no hay órdenes del día generadas/)
+  assert.equal(container.querySelector('#transporte-province'), null)
 })
 
 test('P1: sin orden para la provincia lo dice', async () => {
