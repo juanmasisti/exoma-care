@@ -47,8 +47,6 @@ def http_errors():
         raise HTTPException(404, detail=str(exc)) from exc
     except Conflict as exc:
         raise HTTPException(409, detail=str(exc)) from exc
-    except LookupError as exc:  # un centro se dio de baja mientras se generaba la orden
-        raise HTTPException(409, detail=str(exc)) from exc
     except RouteOptimizerError as exc:
         raise HTTPException(502, detail=str(exc)) from exc
 

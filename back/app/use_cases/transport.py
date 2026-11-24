@@ -41,8 +41,11 @@ class TransportService:
                    for province_id, center_ids in self.routes.centers_with_ready_samples().items()
                    if province_id not in existing}
         # Primero todas las secuencias: si la API de recorridos falla con una provincia, no se guarda ninguna orden.
-        sequences = {province_id: [center["id"] for center in self.route_preview.order_centers(center_ids)]
-                     for province_id, center_ids in pending.items()}
+        try:
+            sequences = {province_id: [center["id"] for center in self.route_preview.order_centers(center_ids)]
+                         for province_id, center_ids in pending.items()}
+        except LookupError as exc:  # un centro se dio de baja mientras se generaba la orden
+            raise Conflict(str(exc)) from exc
         created = False
         for province_id, center_ids in sequences.items():
             try:

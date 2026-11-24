@@ -39,15 +39,15 @@ class FakeOptimizer:
 
 
 class FakeAssigner:
-    """Doble del enganche de T05: anota cada muestra recibida; con `fail`, falla como un error inesperado."""
+    """Doble del enganche de T05: anota cada muestra recibida; con `fail`, lanza ese error inesperado."""
 
     def __init__(self):
         self.sample_ids = []
-        self.fail = False
+        self.fail = None
 
     def asignar_a_sample_set(self, sample_id, now):
         if self.fail:
-            raise RuntimeError("Falla inesperada del armado de lotes.")
+            raise self.fail
         self.sample_ids.append(sample_id)
 
 
@@ -140,6 +140,21 @@ def test_an_inactive_center_is_left_out_of_the_route(transport):
         session.commit()
     assert generate(http).status_code == 201
     assert stop_centers(engine, "Buenos Aires") == la_plata(engine, 3, 1)
+
+
+def test_a_center_deactivated_while_generating_is_a_409_without_routes(transport, monkeypatch):
+    http, engine, _optimizer = transport
+    inactive = center_id(engine, "La Plata", 2)
+    with Session(engine) as session:
+        session.get(ExtractionCenterModel, inactive).active = False
+        session.commit()
+    # Como si la baja hubiera llegado entre la consulta de centros y el pedido a la API de recorridos.
+    monkeypatch.setattr(SQLAlchemyRouteRepository, "centers_with_ready_samples",
+                        lambda self: {province_id(engine, "Buenos Aires"): la_plata(engine, 1, 2)})
+    response = generate(http)
+    assert response.status_code == 409
+    assert "no existe o no está activo" in response.json()["detail"]
+    assert route_count(engine) == 0
 
 
 @pytest.mark.parametrize("day, reason", [(SATURDAY, "es fin de semana"),
@@ -313,13 +328,15 @@ def test_arrival_receives_exactly_the_picked_samples_and_calls_the_assigner_for_
     assert len(assigner.sample_ids) == 4
 
 
-def test_an_unexpected_assigner_error_undoes_the_whole_arrival(transport, assigner):
+@pytest.mark.parametrize("error", [RuntimeError("Falla inesperada del armado de lotes."), KeyError("slot")])
+def test_an_unexpected_assigner_error_undoes_the_whole_arrival(transport, assigner, error):
     http, engine, _optimizer = transport
     route = ready_route(http, engine)
     for index in range(3):
         pick_up(http, route, index)
-    assigner.fail = True
-    with pytest.raises(RuntimeError, match="armado de lotes"):
+    assigner.fail = error
+    # Un KeyError también es inesperado: no se confunde con un 409 de la generación.
+    with pytest.raises(type(error)):
         arrive(http, route)
     assert statuses(engine)["with_transporter"] == 4
     assert my_route(http, engine).json()["status"] == "pending"
