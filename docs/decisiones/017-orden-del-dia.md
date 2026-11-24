@@ -27,6 +27,19 @@ usa el cliente de recorridos de la [decisión 009](009-cliente-recorridos.md).
     (con P7 fin de recorrido, P8 confirmar y P9 llegada).
   - Usan el estilo de Consultas (`turnos-patient`) y están pensadas primero para celular. No tienen
     temperatura, incidencias, firma ni habilitación del vehículo.
+  - **Rediseño con la estructura del prototipo** (rama `feature/transportista-diseno`):
+    - P1 tiene indicadores, barra de avance y botón principal grande.
+    - **Sin tarjeta de temperatura (2 a 8 °C).** El prototipo la tiene, pero el dominio dice que el PO
+      pidió sacarla. Cuando prototipo y dominio no coinciden, manda el dominio.
+    - P2 tiene una línea de paradas y un mapa (`RecorridoMap.jsx`, con leaflet como `CentersMap`) que va
+      del Laboratorio Central a los centros en orden y vuelve.
+    - P3 muestra una tabla con código, volumen y hora de extracción ("—" si el aviso no la trajo).
+    - P4 y P8 son ventanas modales.
+    - P5 y P9 son comprobantes con hora, lugar, cantidad de muestras y custodia transferida.
+    - P6 muestra una tabla agrupada por centro con la hora de retiro, y P7 el balance de la jornada.
+    - Para el mapa y la tabla, `my-route` suma campos sin cambiar reglas: coordenadas del centro,
+      `central_lab` (de la configuración) y `samples` (código, volumen y `taken_at` del aviso). No
+      incluye datos del paciente.
 
 ## Qué se decidió
 
@@ -68,6 +81,9 @@ usa el cliente de recorridos de la [decisión 009](009-cliente-recorridos.md).
 
 ## Qué quedó pendiente
 
+- **Datos del prototipo que el sistema no guarda**: patente del vehículo, temperatura de cada muestra y
+  responsable del centro. Quedaron fuera del rediseño. Si el PO los pide, hay que definir dónde se
+  guardan y quién los carga.
 - **Rol `transporter` con provincia** (Camila, EC-03). Hoy `my-route` recibe `province_id` en el pedido y
   la pantalla lo pide en un select PROVISORIO. Las opciones salen de las órdenes de hoy
   (`GET /api/transport/daily-routes`), no de `GET /api/provinces`: ese endpoint es del turnero y solo
