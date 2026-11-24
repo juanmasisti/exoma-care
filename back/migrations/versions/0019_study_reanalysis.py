@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0018"
-down_revision = "0017"
+revision = "0019"
+down_revision = "0018"
 branch_labels = depends_on = None
 
 # Copia de la 0017: si SQLite recrea la tabla sin el CHECK de estados, se vuelve a crear.
