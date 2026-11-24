@@ -58,8 +58,14 @@ class InMemoryStudyRequestRepository:
         self.rollbacks = 0
 
     # --- datos de apoyo para los tests ---
-    def add_patient(self, patient_id: int, name: str, user_id: int | None = None) -> None:
-        self.s["patients"][patient_id] = {"name": name, "user_id": user_id}
+    def add_patient(self, patient_id: int, name: str, user_id: int | None = None,
+                    email: str | None = None, created_by_physician_id: int | None = None) -> None:
+        self.s["patients"][patient_id] = {
+            "name": name,
+            "user_id": user_id,
+            "email": email if email is not None else f"paciente{patient_id}@demo.test",
+            "created_by": created_by_physician_id,
+        }
         self.commit()
         self.commits -= 1
 
@@ -70,6 +76,19 @@ class InMemoryStudyRequestRepository:
             "specialty": "Genética médica",
             "license_number": f"MN-DEMO-{user_id}",
         }
+        self.add_user(user_id, "treating_physician")
+
+    def add_user(self, user_id: int, role: str, email: str | None = None) -> None:
+        self.s.setdefault("users", {})[user_id] = {
+            "role": role,
+            "email": email if email is not None else f"u{user_id}@demo.test",
+        }
+        self.commit()
+        self.commits -= 1
+
+    def set_study(self, study_id: int, **fields) -> None:
+        """Atajo de prueba: fija campos de un estudio (por ejemplo, resultado disponible)."""
+        self.s["studies"][study_id].update(fields)
         self.commit()
         self.commits -= 1
 
@@ -110,10 +129,28 @@ class InMemoryStudyRequestRepository:
     def list_physicians(self) -> list[dict[str, Any]]:
         return list(self.s["physicians"].values())
 
+    def patient_physician_id(self, patient_id):
+        data = self.s["patients"].get(patient_id)
+        return data["created_by"] if data else None
+
+    def patient_email(self, patient_id):
+        data = self.s["patients"].get(patient_id)
+        return data["email"] if data else None
+
+    def user_email(self, user_id):
+        data = self.s.get("users", {}).get(user_id)
+        return data["email"] if data else None
+
+    def emails_for_role(self, role):
+        value = getattr(role, "value", role)
+        return [u["email"] for u in self.s.get("users", {}).values() if u["role"] == value and u["email"]]
+
     # --- solicitudes ---
-    def create_study(self, *, patient_id, physician_id, include_secondary_findings, pathologies, genes):
+    def create_study(self, *, patient_id, physician_id, include_secondary_findings, pathologies, genes,
+                     original_study_id=None):
         study_id = next(self._ids)
         self.s["studies"][study_id] = {
+            "original_study_id": original_study_id,
             "id": study_id,
             "patient_id": patient_id,
             "physician_id": physician_id,
@@ -140,6 +177,13 @@ class InMemoryStudyRequestRepository:
             and (patient_id is None or data["patient_id"] == patient_id)
         ]
 
+    def list_reanalyses(self, study_id):
+        return [
+            StudyRequest(**data)
+            for data in self.s["studies"].values()
+            if data["original_study_id"] == study_id
+        ]
+
     def transition_status(self, study_id, expected, new):
         data = self.s["studies"].get(study_id)
         if data is None or data["status"] != expected:
@@ -149,7 +193,7 @@ class InMemoryStudyRequestRepository:
 
     # --- presupuesto ---
     def create_budget(self, *, study_id, gene_count, base_cents, extra_genes, extra_cents,
-                      total_cents, currency, issued_by_user_id):
+                      total_cents, currency, issued_by_user_id, discount_cents=0):
         if study_id in self.s["budgets"]:
             raise RuntimeError("Ya existe un presupuesto para el estudio.")
         self.s["budgets"][study_id] = {
@@ -169,6 +213,7 @@ class InMemoryStudyRequestRepository:
             "coverage_percent": None,
             "insurer_cents": None,
             "patient_cents": None,
+            "discount_cents": discount_cents,
         }
         return self.get_budget(study_id)
 

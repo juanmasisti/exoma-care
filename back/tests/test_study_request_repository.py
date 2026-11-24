@@ -248,3 +248,45 @@ def test_end_to_end_with_real_repository_persists_each_stage(engine):
         assert repo.get_coupon(code).status == "usado"
         coverage = repo.get_coverage_request(study_id)
         assert coverage.status == "autorizada" and coverage.authorize_url.endswith("/autorizar")
+
+
+# ---------- EC-14: reanálisis ----------
+
+
+def test_reanalysis_link_discount_and_recipients(repo, session):
+    origin = new_study(repo)
+    repo.commit()
+    child = repo.create_study(
+        patient_id=1,
+        physician_id=10,
+        include_secondary_findings=True,
+        pathologies=[],
+        genes=[GeneRef("BRCA1", "manual")],
+        original_study_id=origin.id,
+    )
+    repo.commit()
+    loaded = repo.get_study(child.id)
+    assert loaded.original_study_id == origin.id and loaded.is_reanalysis
+    assert repo.get_study(origin.id).original_study_id is None
+    assert [item.id for item in repo.list_reanalyses(origin.id)] == [child.id]
+    assert repo.list_reanalyses(child.id) == []
+
+    budget = repo.create_budget(
+        study_id=child.id, gene_count=1, base_cents=50000, extra_genes=0, extra_cents=0,
+        total_cents=35000, currency="USD", issued_by_user_id=20, discount_cents=15000,
+    )
+    repo.commit()
+    assert (budget.total_cents, repo.get_budget(child.id).discount_cents) == (35000, 15000)
+
+    # Mails: el de la cuenta del paciente gana sobre el de la ficha.
+    assert repo.patient_email(1) == "demo40@example.test"
+    session.add(make_user(50, UserRole.BIOINFORMATICIAN))
+    session.add(Paciente(id=2, dni="45000002", nombre="Sin", apellido="Cuenta", email="ficha@example.test",
+                         created_by_physician_id=11))
+    session.commit()
+    assert repo.patient_email(2) == "ficha@example.test"
+    assert repo.patient_email(99) is None
+    assert repo.patient_physician_id(2) == 11
+    assert repo.user_email(10) == "demo10@example.test"
+    assert repo.emails_for_role(UserRole.BIOINFORMATICIAN) == ["demo50@example.test"]
+    assert repo.emails_for_role(UserRole.LAB_ADMINISTRATOR) == ["demo20@example.test"]
