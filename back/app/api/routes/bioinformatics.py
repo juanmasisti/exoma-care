@@ -71,6 +71,7 @@ class BioinformaticsStudyResponse(BaseModel):
     analyst_id: int | None
     created_at: datetime
     codigo_patologia: str | None = None
+    original_study_id: int | None = None  # EC-14: reanálisis del estudio indicado
     genes: list[str] = Field(default_factory=list)
     patient: dict[str, Any] | None = None
     variantes_detectadas: list[dict[str, Any]] | None

@@ -245,6 +245,8 @@ class SQLAlchemyStudyRepository:
             "analyst_id": study.analyst_id,
             "created_at": study.created_at,
             "codigo_patologia": study.codigo_patologia,
+            # EC-14: un reanálisis reusa el exoma de este estudio (sin muestra nueva).
+            "original_study_id": study.original_study_id,
             "genes": self.genes_for_study(study.id),
             "variantes_detectadas": study.variantes_detectadas,
             "resultado_diagnostico": study.resultado_diagnostico,
