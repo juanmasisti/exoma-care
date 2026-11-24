@@ -13,6 +13,7 @@ from app.infrastructure.database.session import Base
 from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models, logistics_models, study_models  # noqa: F401
 from app.infrastructure.database.reconcile_legacy_bioinformatics_revision import (
     LOGISTICS_TABLES,
+    TRANSPORT_TABLES,
     reconcile_legacy_bioinformatics_revision,
 )
 
@@ -135,7 +136,7 @@ def test_legacy_bioinformatics_database_can_be_reconciled_without_losing_schema(
     engine = create_engine(f"sqlite:///{database}")
     legacy_metadata = MetaData()
     for table in Base.metadata.sorted_tables:
-        if table.name not in LOGISTICS_TABLES:
+        if table.name not in LOGISTICS_TABLES | TRANSPORT_TABLES:
             table.to_metadata(legacy_metadata)
     legacy_metadata.create_all(engine)
 
@@ -217,7 +218,7 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     from alembic.script import ScriptDirectory
     config=Config(str(Path(__file__).resolve().parents[1]/"alembic.ini"))
     scripts=ScriptDirectory.from_config(config)
-    assert scripts.get_heads()==["0017"]
+    assert scripts.get_heads()==["0018"]
     assert scripts.get_revision("0004").path.endswith("0004_extraction_centers.py")
     assert scripts.get_revision("0005").down_revision=="0004"
     assert scripts.get_revision("0006").down_revision=="0005"
@@ -233,3 +234,4 @@ def test_migration_history_has_one_unique_head_after_logistics_and_family_integr
     assert scripts.get_revision("0015").down_revision=="0014"
     assert scripts.get_revision("0016").down_revision=="0015"
     assert scripts.get_revision("0017").down_revision=="0016"
+    assert scripts.get_revision("0018").down_revision=="0017"

@@ -1,9 +1,9 @@
-"""Centros de extracción tercerizados, sus provincias, los feriados, los turnos del turnero y las muestras."""
+"""Centros de extracción, provincias, feriados, turnos, muestras, órdenes del día y sample sets."""
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Numeric, String, TypeDecorator,
-                        UniqueConstraint, text, true)
+from sqlalchemy import (JSON, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, Numeric,
+                        String, TypeDecorator, UniqueConstraint, text, true)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.session import Base
@@ -125,3 +125,77 @@ class SampleEventModel(Base):
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))  # None: lo hizo el bot
     reason: Mapped[str | None] = mapped_column(String(500))  # motivo del remuestreo
     at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class DailyRouteModel(Base):
+    """Orden del día de una provincia."""
+    __tablename__ = "daily_routes"
+    __table_args__ = (UniqueConstraint("date", "province_id", name="uq_daily_routes_date_province"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date)
+    province_id: Mapped[int] = mapped_column(ForeignKey("provinces.id"))
+    # PROVISORIO (decisión 016): opcional hasta que exista el rol transporter con provincia.
+    transporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=lambda: datetime.now(UTC))
+    arrived_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class RouteStopModel(Base):
+    """Centro de la orden, en el orden fijo que devolvió la API de recorridos."""
+    __tablename__ = "route_stops"
+    __table_args__ = (UniqueConstraint("route_id", "sequence", name="uq_route_stops_route_sequence"),
+                      UniqueConstraint("route_id", "center_id", name="uq_route_stops_route_center"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    route_id: Mapped[int] = mapped_column(ForeignKey("daily_routes.id"))
+    center_id: Mapped[int] = mapped_column(ForeignKey("extraction_centers.id"))
+    sequence: Mapped[int] = mapped_column(Integer)
+    picked_up_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
+class RoutePickupModel(Base):
+    """Muestra retirada en una parada; la llegada recibe exactamente estas."""
+    __tablename__ = "route_pickups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    stop_id: Mapped[int] = mapped_column(ForeignKey("route_stops.id"))
+    sample_id: Mapped[int] = mapped_column(ForeignKey("samples.id"), unique=True)
+
+
+ASSEMBLING_ONLY = text("status = 'assembling'")
+
+
+class SampleSetModel(Base):
+    """Lote de hasta 10 muestras; también es el paquete de FedEx (sin tabla de envíos aparte)."""
+    __tablename__ = "sample_sets"
+    # Nunca hay dos lotes armándose a la vez: si dos llegadas abren uno, una falla y reintenta.
+    __table_args__ = (Index("uq_sample_sets_assembling", "status", unique=True,
+                            sqlite_where=ASSEMBLING_ONLY, postgresql_where=ASSEMBLING_ONLY),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    status: Mapped[str] = mapped_column(String(30))
+    is_urgent: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=lambda: datetime.now(UTC))
+    closed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    csv_path: Mapped[str | None] = mapped_column(String(255))
+    authorization_pdf_path: Mapped[str | None] = mapped_column(String(255))
+    pickup_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # UUID del retiro en FedEx: `Courier.estado_retiro` consulta por id (decisión 016).
+    courier_pickup_id: Mapped[str | None] = mapped_column(String(36))
+    version: Mapped[int] = mapped_column(Integer)
+
+    __mapper_args__ = {"version_id_col": version}
+
+
+class SampleSetItemModel(Base):
+    __tablename__ = "sample_set_items"
+    # Cada muestra toma un lugar 1..10: dos que chocan en el mismo lugar no entran las dos (sin FOR UPDATE).
+    __table_args__ = (UniqueConstraint("sample_set_id", "slot", name="uq_sample_set_items_set_slot"),
+                      CheckConstraint("slot BETWEEN 1 AND 10", name="ck_sample_set_items_slot"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sample_set_id: Mapped[int] = mapped_column(ForeignKey("sample_sets.id"))
+    sample_id: Mapped[int] = mapped_column(ForeignKey("samples.id"), unique=True)
+    slot: Mapped[int] = mapped_column(Integer)
