@@ -33,7 +33,7 @@ def test_reconcile_preserves_clinical_data_and_reaches_head(tmp_path, monkeypatc
     backup_engine.dispose()
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0018"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0019"
         assert connection.scalar(text("SELECT apigen_code FROM pathologies WHERE id=1")) == "FABRY"
         assert connection.scalar(text("SELECT label FROM symptoms WHERE id=1")) == "Original"
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
