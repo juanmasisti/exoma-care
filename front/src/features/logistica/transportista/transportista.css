@@ -1,24 +1,121 @@
 /* Extras de las pantallas de transporte; la base es el estilo de Consultas de turnos.css (.turnos-patient). */
+/* Panel de órdenes del día (administrativo). */
 .transporte-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .transporte-toolbar input[type="date"] { border: 1px solid var(--turnos-line); border-radius: 9px; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--turnos-ink); min-height: 44px; background: #fff; }
-.transporte-result { margin: 0 0 16px; }
 .transporte-progress p { margin: 12px 0 6px; font-size: 13px; color: var(--turnos-muted); }
 .transporte-progress strong { color: var(--turnos-ink); }
 .transporte-progress progress { width: 100%; max-width: 420px; height: 8px; accent-color: var(--turnos-accent); }
+
+/* App del transportista: pensada primero para celular. */
+.transporte { --transporte-done: #047857; --transporte-done-soft: #ecfdf5; --transporte-done-line: #a7f3d0; }
+.transporte-result { margin: 0 0 16px; }
 .transporte-block { margin-bottom: 16px; }
-.transporte-block select { max-width: 360px; }
+.transporte-block select { max-width: 360px; min-height: 48px; font-size: 15px; }
 .transporte-text { margin: 12px 0 0; font-size: 14px; line-height: 1.6; }
 .transporte-text small { display: block; color: var(--turnos-muted); }
-.transporte-kpis { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.transporte .turnos-card + .turnos-card, .transporte .turnos-card + .transporte-orden, .transporte-orden + .transporte-footer { margin-top: 16px; }
+.transporte-footer { margin-top: 20px; }
+
+/* Botón principal grande, a lo ancho en celular. */
+.transporte .transporte-primary { min-height: 52px; padding: 14px 24px; font-size: 15px; border-radius: 12px; margin: 16px 0 12px; }
+.transporte-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.transporte-actions .transporte-primary { margin: 0; }
+
+/* Indicadores de la jornada. */
+.transporte-kpis { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .transporte-kpis li { border: 1px solid var(--turnos-line); border-radius: 14px; background: #fff; padding: 14px; font-size: 12px; color: var(--turnos-muted); }
-.transporte-kpis strong { display: block; font-size: 1.6rem; color: var(--turnos-ink); }
-.transporte-next { border-color: var(--turnos-accent-line); box-shadow: inset 4px 0 0 var(--turnos-accent); }
-.transporte-badge-next { background: var(--turnos-accent); color: #fff; }
-.transporte-badge-pending { background: #f1f5f9; color: var(--turnos-muted); }
-.transporte-codes { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.transporte-codes li { padding: 6px 10px; border-radius: 8px; background: var(--turnos-accent-soft); font-family: ui-monospace, monospace; font-size: 13px; }
-.transporte-confirm { margin-top: 16px; }
+.transporte-kpis strong { display: block; font-size: 1.6rem; color: var(--turnos-ink); line-height: 1.3; }
+.transporte-kpis .transporte-kpi-accent strong { color: var(--turnos-accent); }
+.transporte-balance { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 16px 0 4px; }
+.transporte-balance li:last-child strong { font-size: 1rem; }
+
+/* Barra de avance del recorrido. */
+.transporte-avance > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; color: var(--turnos-muted); margin-bottom: 10px; }
+.transporte-avance strong { color: var(--turnos-ink); }
+.transporte-avance progress { display: block; width: 100%; height: 10px; border: 0; border-radius: 999px; overflow: hidden; background: #eef1f7; accent-color: var(--turnos-accent); }
+.transporte-avance progress::-webkit-progress-bar { background: #eef1f7; }
+.transporte-avance progress::-webkit-progress-value { background: var(--turnos-accent); border-radius: 999px; }
+.transporte-avance progress::-moz-progress-bar { background: var(--turnos-accent); border-radius: 999px; }
+
+.transporte-next-card { border-left: 4px solid var(--turnos-accent); }
+.transporte-next-card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.transporte-next-card .turnos-note { margin: 0; }
+
+
+/* P2: línea de paradas y mapa. */
+.transporte-orden { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.transporte-timeline { list-style: none; margin: 0; padding: 0; }
+.transporte-stop { position: relative; display: flex; gap: 14px; padding-bottom: 20px; }
+.transporte-stop:not(:last-child)::before { content: ""; position: absolute; left: 17px; top: 38px; bottom: 0; border-left: 2px dashed var(--turnos-line); }
+.transporte-stop-done:not(:last-child)::before { border-left-style: solid; border-color: var(--transporte-done-line); }
+.transporte-stop-marker { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; font-weight: 700; font-size: 14px; background: #f1f5f9; color: var(--turnos-muted); border: 2px solid var(--turnos-line); }
+.transporte-stop-marker svg { width: 20px; height: 20px; }
+.transporte-stop-next .transporte-stop-marker { background: var(--turnos-accent); color: #fff; border-color: var(--turnos-accent); }
+.transporte-stop-done .transporte-stop-marker { background: var(--transporte-done-soft); color: var(--transporte-done); border-color: var(--transporte-done-line); }
+.transporte-stop-body { flex: 1; min-width: 0; border: 1px solid var(--turnos-line); border-radius: 14px; background: #fff; padding: 14px 16px; }
+.transporte-stop-next .transporte-stop-body { border-color: var(--turnos-accent-line); box-shadow: inset 4px 0 0 var(--turnos-accent); }
+.transporte-stop-body h2 { font-size: 1rem; margin: 0 8px 6px 0; display: inline; }
+.transporte-stop-pending .turnos-badge { background: #f1f5f9; color: var(--turnos-muted); }
+.transporte-stop-next .turnos-badge { background: var(--turnos-accent); color: #fff; }
+.transporte-stop-done .turnos-badge { background: var(--transporte-done-soft); color: var(--transporte-done); }
+.transporte-stop-body .transporte-primary { margin: 12px 0 0; }
+.transporte-map-card h2 { margin: 0; }
+.transporte .transporte-map { height: 340px; }
+.transporte-pin { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font: 700 13px/1 system-ui, sans-serif; border: 2px solid #fff; box-shadow: 0 1px 4px #0f172a55; background: #fff; color: #5545ef; }
+.transporte-pin-done { background: #047857; color: #fff; }
+.transporte-pin-lab { background: #17334a; color: #fff; font-size: 11px; }
+
+/* P3: centro y tabla de muestras. */
+.transporte-center-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px; }
+.transporte-center-head > svg { flex: none; width: 40px; height: 40px; padding: 8px; border-radius: 12px; background: var(--turnos-accent-soft); color: var(--turnos-accent); }
+.transporte-center-head > div { flex: 1; min-width: 0; }
+.transporte-total { margin: 0; text-align: right; font-size: 12px; color: var(--turnos-muted); }
+.transporte-total strong { display: block; font-size: 1.6rem; color: var(--turnos-accent); line-height: 1.2; }
+.transporte-table-wrap { overflow-x: auto; }
+.transporte-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.transporte-table caption { text-align: left; font-weight: 700; font-size: 1rem; padding-bottom: 10px; }
+.transporte-table th, .transporte-table td { padding: 12px 10px; text-align: left; border-bottom: 1px solid var(--turnos-line); }
+.transporte-table thead th { font-size: 12px; color: var(--turnos-muted); font-weight: 700; background: #f8fafc; }
+.transporte-table tbody th { font-family: ui-monospace, monospace; font-weight: 600; }
+.transporte-table td:not(:first-child) { white-space: nowrap; }
+.transporte-table .transporte-group th { background: var(--turnos-accent-soft); color: var(--turnos-accent-ink); font-family: inherit; font-size: 13px; }
+.transporte .transporte-actions { margin-top: 20px; }
+
+/* P4 y P8: ventanas modales. */
+.transporte-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: #0f172a66; }
+.transporte-modal { width: 100%; max-width: 460px; border-radius: 18px; background: #fff; padding: 24px; box-shadow: 0 20px 50px #0f172a40; }
+.transporte-modal h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.transporte-modal p { margin: 0; font-size: 14px; line-height: 1.6; }
+.transporte-modal .turnos-error { margin-top: 12px; }
+.transporte-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.transporte-modal-actions button { min-height: 48px; }
+
+/* P5 y P9: comprobantes. */
+.transporte-receipt { max-width: 520px; margin: 0 auto; text-align: center; }
+.transporte-receipt-icon { width: 56px; height: 56px; padding: 12px; border-radius: 16px; background: var(--transporte-done-soft); color: var(--transporte-done); }
+.transporte-receipt h2 { font-size: 1.4rem; margin: 12px 0 4px; }
+.transporte-receipt-message { margin: 0; color: var(--turnos-muted); font-size: 14px; }
+.transporte .transporte-receipt dl { text-align: left; margin: 20px 0 16px; padding: 16px; border-radius: 12px; background: var(--turnos-accent-soft); }
+.transporte-receipt dd { margin: 0; font-weight: 600; }
+.transporte-stamp { font-variant-numeric: tabular-nums; font-size: 1.1rem; color: var(--turnos-accent-ink); }
+.transporte-codes { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.transporte-codes li { padding: 6px 10px; border-radius: 8px; background: #f1f5f9; font-family: ui-monospace, monospace; font-size: 13px; }
+.transporte-receipt .transporte-primary { width: 100%; }
+.transporte-receipt .turnos-links { justify-content: center; }
+
+@media (max-width: 900px) {
+  .transporte-orden { grid-template-columns: minmax(0, 1fr); }
+  .transporte-map-card { order: -1; }
+}
 @media (max-width: 600px) {
-  .transporte-toolbar > *, .transporte-confirm button { flex: 1 1 100%; }
-  .transporte-kpis { grid-template-columns: minmax(0, 1fr); }
+  .transporte-toolbar > * { flex: 1 1 100%; }
+  .transporte-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .transporte-balance { grid-template-columns: minmax(0, 1fr); }
+  .transporte .transporte-primary, .transporte-actions > * { width: 100%; }
+  .transporte .transporte-map { height: 260px; }
+  .transporte-modal-backdrop { place-items: end center; padding: 0; }
+  .transporte-modal { max-width: none; border-radius: 18px 18px 0 0; }
+  .transporte-modal-actions { flex-direction: column-reverse; }
+  .transporte-modal-actions button { width: 100%; }
+  .transporte-table th, .transporte-table td { padding: 10px 6px; }
 }
