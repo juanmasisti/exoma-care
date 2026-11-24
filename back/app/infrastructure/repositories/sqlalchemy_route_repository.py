@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.entities.logistics import DailyRouteStatus
+from app.domain.entities.logistics import DailyRouteStatus, SampleStatus
 from app.domain.interfaces.route_repository import RouteAlreadyExists
-from app.infrastructure.database.logistics_models import DailyRouteModel, RouteStopModel
+from app.infrastructure.database.logistics_models import (
+    AppointmentModel, DailyRouteModel, ExtractionCenterModel, ProvinceModel, RouteStopModel, SampleModel,
+)
 
 
 class SQLAlchemyRouteRepository:
@@ -39,6 +41,33 @@ class SQLAlchemyRouteRepository:
                 raise RouteAlreadyExists() from None
             raise  # otro error (centro repetido o inexistente): no es una orden ya generada
         return route.id
+
+    def centers_with_ready_samples(self) -> dict[int, list[int]]:
+        # Solo centros activos: la API de recorridos no ordena centros dados de baja (RoutePreviewService).
+        rows = self.session.execute(
+            select(ExtractionCenterModel.province_id, ExtractionCenterModel.id).distinct()
+            .join(AppointmentModel, AppointmentModel.center_id == ExtractionCenterModel.id)
+            .join(SampleModel, SampleModel.appointment_id == AppointmentModel.id)
+            .where(SampleModel.status == SampleStatus.READY_FOR_PICKUP.value, ExtractionCenterModel.active.is_(True))
+            .order_by(ExtractionCenterModel.province_id, ExtractionCenterModel.id)
+        )
+        centers = {}
+        for province_id, center_id in rows:
+            centers.setdefault(province_id, []).append(center_id)
+        return centers
+
+    def routes_for_day(self, day: date) -> list[dict]:
+        rows = self.session.execute(
+            select(DailyRouteModel, ProvinceModel.name, func.count(RouteStopModel.id),
+                   func.count(RouteStopModel.picked_up_at))
+            .join(ProvinceModel, ProvinceModel.id == DailyRouteModel.province_id)
+            .outerjoin(RouteStopModel, RouteStopModel.route_id == DailyRouteModel.id)
+            .where(DailyRouteModel.date == day)
+            .group_by(DailyRouteModel.id, ProvinceModel.name).order_by(ProvinceModel.name)
+        )
+        return [{"id": route.id, "date": route.date, "province_id": route.province_id, "province": province,
+                 "status": route.status, "arrived_at": route.arrived_at, "stops": stops, "picked_up": picked_up}
+                for route, province, stops, picked_up in rows]
 
     def _record(self, route: DailyRouteModel) -> dict:
         stops = self.session.scalars(select(RouteStopModel).where(RouteStopModel.route_id == route.id)
