@@ -14,5 +14,15 @@ export async function generateDailyRoutes(date) {
 export async function listDailyRoutes(date) {
   return (await api.get('/transport/daily-routes', { params: { date } })).data
 }
+// PROVISORIO (decisión 016): la provincia va en el pedido hasta que el rol transportista la tenga.
+export async function getMyRoute(date, provinceId) {
+  return (await api.get('/transport/my-route', { params: { date, province_id: provinceId } })).data
+}
+export async function pickUp(routeId, stopId) {
+  return (await api.post(`/transport/daily-routes/${routeId}/stops/${stopId}/pickup`)).data
+}
+export async function registerArrival(routeId) {
+  return (await api.post(`/transport/daily-routes/${routeId}/arrival`)).data
+}
 
 export const ROUTE_STATUS = { pending: 'Pendiente', arrived: 'Recibida en el laboratorio central' }

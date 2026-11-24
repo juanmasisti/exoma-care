@@ -75,7 +75,7 @@ beforeEach(() => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
   calls = []
   // routes: órdenes ya generadas por fecha; pending: las que generaría el back; route: la de Buenos Aires.
-  Object.assign(fake, { networkDown: false, routes: {}, pending: [], generateError: null, route: buenosAiresRoute(), arrivalError: null })
+  Object.assign(fake, { networkDown: false, routes: {}, pending: [], generateError: null, route: buenosAiresRoute(), arrivalError: null, myRouteDown: false })
   mock.timers.enable({ apis: ['Date'], now: MONDAY_9 })
   api.defaults.adapter = async (config) => {
     calls.push({ url: config.url, method: config.method, params: config.params, data: config.data && JSON.parse(config.data) })
@@ -93,6 +93,7 @@ beforeEach(() => {
       return ok(config, fake.routes[date], created ? 201 : 200)
     }
     if (url === '/transport/my-route') {
+      if (fake.myRouteDown) throw failure(config, 500, 'No se pudo cargar la orden del día.')
       const route = fake.route
       if (!route || route.province_id !== Number(config.params.province_id) || route.date !== config.params.date)
         throw failure(config, 404, 'No hay orden del día para esa provincia en esa fecha.')
@@ -109,8 +110,17 @@ beforeEach(() => {
 })
 afterEach(async () => { await act(async () => { root.unmount(); setSession(null) }); dom.happyDOM.abort(); dom.close(); mock.timers.reset() })
 
+let entries
 export async function render(path, session = labAdmin) {
-  await act(async () => { setSession(session); root.render(React.createElement(Harness, { initialEntries: [path] })) })
+  entries = [path]
+  await act(async () => { setSession(session); root.render(React.createElement(Harness, { initialEntries: entries })) })
+  await settle()
+}
+// Navega dentro de la misma app (sin desmontar), como un link que no está en pantalla.
+export async function go(path) {
+  await act(async () => root.render(React.createElement(Harness, { initialEntries: entries, navigateTo: path })))
+  // Sin destino después: si no, el harness vuelve a esta ruta cada vez que la app navega.
+  await act(async () => root.render(React.createElement(Harness, { initialEntries: entries })))
   await settle()
 }
 export async function settle() { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 200)) }) }
