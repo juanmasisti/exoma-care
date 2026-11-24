@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Date, Integer, String, func, insert, literal, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.entities.logistics import TIMEZONE, DailyRouteStatus, SampleStatus, study_code
 from app.domain.interfaces.route_repository import RouteAlreadyExists
 from app.infrastructure.database.logistics_models import (
     AppointmentModel, DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, RouteStopModel,
-    SampleModel,
+    SampleModel, UTCDateTime,
 )
 
 
@@ -33,20 +32,23 @@ class SQLAlchemyRouteRepository:
         return self._record(route) if route is not None else None
 
     def add_route(self, day: date, province_id: int, transporter_id: int | None, center_ids: list[int]) -> int:
-        route = DailyRouteModel(date=day, province_id=province_id, transporter_id=transporter_id,
-                                status=DailyRouteStatus.PENDING.value)
-        try:
-            # Savepoint: si la orden ya existe se deshace solo esto, no el resto del pedido.
-            with self.session.begin_nested():
-                self.session.add(route)
-                self.session.flush()
-                self.session.add_all(RouteStopModel(route_id=route.id, center_id=center_id, sequence=sequence)
-                                     for sequence, center_id in enumerate(center_ids, start=1))
-        except IntegrityError:
-            if self.route_for(day, province_id) is not None:
-                raise RouteAlreadyExists() from None
-            raise  # otro error (centro repetido o inexistente): no es una orden ya generada
-        return route.id
+        # INSERT condicional y no un savepoint: en SQLite, un savepoint antes de cualquier escritura del pedido
+        # se confirma solo y el rollback no lo deshace. El NOT EXISTS corre con el lock de escritura tomado; si
+        # igual saltara el índice único (otro motor), el pedido falla entero.
+        same_route = (DailyRouteModel.date == day, DailyRouteModel.province_id == province_id)
+        values = select(literal(day, Date), literal(province_id, Integer), literal(transporter_id, Integer),
+                        literal(DailyRouteStatus.PENDING.value, String), literal(datetime.now(UTC), UTCDateTime)
+                        ).where(~select(DailyRouteModel.id).where(*same_route).exists())
+        result = self.session.execute(insert(DailyRouteModel).from_select(
+            ["date", "province_id", "transporter_id", "status", "created_at"], values))
+        if result.rowcount == 0:
+            raise RouteAlreadyExists()
+        route_id = self.session.scalar(select(DailyRouteModel.id).where(*same_route))
+        # Un centro repetido o inexistente es IntegrityError y aborta el pedido entero, sin confirmar nada.
+        self.session.add_all(RouteStopModel(route_id=route_id, center_id=center_id, sequence=sequence)
+                             for sequence, center_id in enumerate(center_ids, start=1))
+        self.session.flush()
+        return route_id
 
     def centers_with_ready_samples(self) -> dict[int, list[int]]:
         # Solo centros activos: la API de recorridos no ordena centros dados de baja (RoutePreviewService).

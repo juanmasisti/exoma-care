@@ -41,6 +41,14 @@ usa el cliente de recorridos de la [decisión 009](009-cliente-recorridos.md).
   generar la orden de otro día.
 - **La llegada exige todas las paradas retiradas** (lo decidió Ivo). Con centros pendientes responde 409,
   porque el orden es fijo y no se saltea.
+- **`add_route` sin savepoint.** La base guardaba la orden dentro de un savepoint. En SQLite (pysqlite)
+  no se abre la transacción antes de un `SAVEPOINT`: como la primera orden es la primera escritura del
+  pedido, quedaba confirmada aunque fallara la provincia siguiente (la misma falla que encontró T06 en
+  el cierre de lotes). Ahora la orden es un INSERT condicional (`WHERE NOT EXISTS` por fecha y
+  provincia; si no entra, `RouteAlreadyExists`) y las paradas van sin savepoint: cualquier error deshace
+  el pedido entero. En SQLite el `NOT EXISTS` corre con el lock de escritura tomado, así que el índice
+  único no llega a saltar. Si saltara (otro motor, por ejemplo Postgres), el pedido falla entero con 500
+  y no se trata como una orden ya generada.
 - **Sin `FOR UPDATE`** (SQLite).
   - El retiro y la llegada marcan la parada o la orden con un UPDATE condicional
     (`picked_up_at IS NULL`, `status = 'pending'`). De dos pedidos a la vez, uno gana y el otro recibe

@@ -11,6 +11,7 @@ from app.api.routes.sample_sets import get_sample_set_assigner
 from app.api.routes.transport import get_route_optimizer
 from app.config import get_settings
 from app.domain.interfaces.route_optimizer import RouteOptimizerError
+from app.domain.interfaces.route_repository import RouteAlreadyExists
 from app.infrastructure.adapters.route_optimizer_client import RouteOptimizerClient
 from app.infrastructure.database.logistics_models import (
     DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, SampleEventModel, SampleModel,
@@ -140,6 +141,50 @@ def test_an_inactive_center_is_left_out_of_the_route(transport):
         session.commit()
     assert generate(http).status_code == 201
     assert stop_centers(engine, "Buenos Aires") == la_plata(engine, 3, 1)
+
+
+def test_a_route_written_first_is_undone_by_the_rollback(transport):
+    _http, engine, _optimizer = transport
+    with Session(engine) as session:
+        routes = SQLAlchemyRouteRepository(session)
+        # Primera escritura de la sesión: en SQLite un savepoint acá se confirmaría solo.
+        routes.add_route(date(2026, 11, 2), province_id(engine, "Buenos Aires"), None, la_plata(engine, 1))
+        routes.rollback()
+    assert route_count(engine) == 0
+
+
+def test_a_route_generated_by_another_request_is_already_exists_and_the_session_keeps_working(transport):
+    _http, engine, _optimizer = transport
+    day, buenos_aires = date(2026, 11, 2), province_id(engine, "Buenos Aires")
+    with Session(engine) as other, Session(engine) as session:
+        # La sesión B leyó que faltaba la orden; antes de escribir, la sesión A la confirma.
+        assert SQLAlchemyRouteRepository(session).route_for(day, buenos_aires) is None
+        winner = SQLAlchemyRouteRepository(other)
+        winner.add_route(day, buenos_aires, None, la_plata(engine, 1))
+        winner.commit()
+        routes = SQLAlchemyRouteRepository(session)
+        with pytest.raises(RouteAlreadyExists):
+            routes.add_route(day, buenos_aires, None, la_plata(engine, 2))
+        routes.add_route(day, province_id(engine, "Córdoba"), None, [center_id(engine, "Córdoba", 1)])
+        routes.commit()
+    assert route_count(engine) == 2
+    assert stop_centers(engine, "Buenos Aires") == la_plata(engine, 1)
+
+
+def test_a_failure_with_the_second_province_leaves_no_route(transport, monkeypatch):
+    http, engine, _optimizer = transport
+    original = SQLAlchemyRouteRepository.add_route
+    calls = []
+
+    def fail_on_second(self, *args):
+        calls.append(args)
+        if len(calls) == 2:
+            raise RuntimeError("Falla inesperada al guardar la segunda orden.")
+        return original(self, *args)
+    monkeypatch.setattr(SQLAlchemyRouteRepository, "add_route", fail_on_second)
+    with pytest.raises(RuntimeError, match="segunda orden"):
+        generate(http)
+    assert route_count(engine) == 0
 
 
 def test_a_center_deactivated_while_generating_is_a_409_without_routes(transport, monkeypatch):
