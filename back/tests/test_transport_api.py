@@ -7,11 +7,14 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.routes.sample_sets import get_sample_set_assigner
 from app.api.routes.transport import get_route_optimizer
 from app.config import get_settings
 from app.domain.interfaces.route_optimizer import RouteOptimizerError
 from app.infrastructure.adapters.route_optimizer_client import RouteOptimizerClient
-from app.infrastructure.database.logistics_models import DailyRouteModel, ExtractionCenterModel, ProvinceModel
+from app.infrastructure.database.logistics_models import (
+    DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, SampleEventModel, SampleModel,
+)
 from app.infrastructure.repositories.sqlalchemy_route_repository import SQLAlchemyRouteRepository
 from app.main import app
 from appointments_setup import ADMIN, NOW, SOFIA, client, login  # noqa: F401
@@ -35,6 +38,19 @@ class FakeOptimizer:
         return self.answer(points)
 
 
+class FakeAssigner:
+    """Doble del enganche de T05: anota cada muestra recibida; con `fail`, falla como un error inesperado."""
+
+    def __init__(self):
+        self.sample_ids = []
+        self.fail = False
+
+    def asignar_a_sample_set(self, sample_id, now):
+        if self.fail:
+            raise RuntimeError("Falla inesperada del armado de lotes.")
+        self.sample_ids.append(sample_id)
+
+
 @pytest.fixture
 def transport(client):
     http, engine = client
@@ -43,6 +59,13 @@ def transport(client):
     optimizer = FakeOptimizer()
     app.dependency_overrides[get_route_optimizer] = lambda: optimizer
     return http, engine, optimizer
+
+
+@pytest.fixture
+def assigner(transport):
+    fake = FakeAssigner()
+    app.dependency_overrides[get_sample_set_assigner] = lambda: fake
+    return fake
 
 
 def generate(http, day=MONDAY, user=ADMIN):
@@ -164,6 +187,152 @@ def test_only_the_lab_administrator_generates_and_lists(transport):
     assert http.get("/api/transport/daily-routes", params={"date": MONDAY},
                     headers=login(http, SOFIA)).status_code == 403
     assert route_count(engine) == 0
+
+
+# Recorrido del transportista: retiro por parada y llegada al laboratorio central.
+
+def my_route(http, engine, province="Buenos Aires", day=MONDAY, user=ADMIN):
+    return http.get("/api/transport/my-route", params={"date": day, "province_id": province_id(engine, province)},
+                    headers=login(http, user))
+
+
+def pick_up(http, route, index, user=ADMIN):
+    stop_id = route["stops"][index]["id"]
+    return http.post(f"/api/transport/daily-routes/{route['id']}/stops/{stop_id}/pickup", headers=login(http, user))
+
+
+def arrive(http, route, user=ADMIN):
+    return http.post(f"/api/transport/daily-routes/{route['id']}/arrival", headers=login(http, user))
+
+
+def statuses(engine):
+    with Session(engine) as session:
+        return dict(session.execute(select(SampleModel.status, func.count()).group_by(SampleModel.status)).all())
+
+
+def ready_route(http, engine):
+    generate(http)
+    return my_route(http, engine).json()
+
+
+def test_my_route_shows_the_fixed_order_the_centers_and_their_codes(transport):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    assert route["province"] == "Buenos Aires" and route["status"] == "pending"
+    assert [stop["center"]["id"] for stop in route["stops"]] == la_plata(engine, 3, 2, 1)
+    assert [len(stop["sample_codes"]) for stop in route["stops"]] == [1, 1, 2]
+    assert all(code.startswith("EST-") for stop in route["stops"] for code in stop["sample_codes"])
+    assert route["next_stop_id"] == route["stops"][0]["id"]
+    assert route["on_board"] == []
+
+
+def test_my_route_is_404_without_a_route(transport):
+    http, engine, _optimizer = transport
+    assert my_route(http, engine).status_code == 404
+    generate(http)
+    assert my_route(http, engine, "Mendoza").status_code == 404
+    assert my_route(http, engine, day="2026-11-03").status_code == 404
+
+
+def test_pickup_follows_the_fixed_order_and_is_not_repeated(transport):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    skipped = pick_up(http, route, 1)
+    assert skipped.status_code == 409
+    assert "primero hay que retirar la parada 1" in skipped.json()["detail"]
+    receipt = pick_up(http, route, 0)
+    assert receipt.status_code == 200
+    assert receipt.json()["center"]["id"] == la_plata(engine, 3)[0]
+    assert receipt.json()["sample_codes"] == route["stops"][0]["sample_codes"]
+    repeated = pick_up(http, route, 0)
+    assert repeated.status_code == 409 and repeated.json()["detail"] == "Este centro ya fue retirado."
+    assert statuses(engine)["with_transporter"] == 1
+    after = my_route(http, engine).json()
+    assert after["next_stop_id"] == route["stops"][1]["id"]
+    assert after["on_board"] == route["stops"][0]["sample_codes"]
+    # En hora de Argentina, igual que el comprobante (el reloj de la prueba).
+    assert after["stops"][0]["picked_up_at"] == receipt.json()["picked_up_at"] == "2026-11-01T10:00:00-03:00"
+
+
+def test_pickup_saves_each_sample_and_signs_the_events(transport):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    pick_up(http, route, 0)
+    pick_up(http, route, 1)
+    pick_up(http, route, 2)
+    with Session(engine) as session:
+        picked = session.scalars(select(RoutePickupModel.sample_id)).all()
+        events = session.scalars(select(SampleEventModel).where(SampleEventModel.sample_id.in_(picked),
+                                                                SampleEventModel.to_status == "with_transporter")).all()
+    assert len(picked) == 4
+    assert len(events) == 4 and {event.actor_id for event in events} == {ADMIN}
+
+
+def test_pickup_of_a_stop_of_another_route_is_404(transport):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    cordoba = my_route(http, engine, "Córdoba").json()
+    other_stop = cordoba["stops"][0]["id"]
+    response = http.post(f"/api/transport/daily-routes/{route['id']}/stops/{other_stop}/pickup",
+                         headers=login(http, ADMIN))
+    assert response.status_code == 404
+    assert http.post("/api/transport/daily-routes/999/arrival", headers=login(http, ADMIN)).status_code == 404
+
+
+def test_arrival_needs_every_stop_picked_up(transport, assigner):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    pick_up(http, route, 0)
+    response = arrive(http, route)
+    assert response.status_code == 409
+    assert "faltan retirar 2 centros" in response.json()["detail"]
+    assert assigner.sample_ids == []
+
+
+def test_arrival_receives_exactly_the_picked_samples_and_calls_the_assigner_for_each(transport, assigner):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    for index in range(3):
+        pick_up(http, route, index)
+    before = statuses(engine)
+    response = arrive(http, route)
+    assert response.status_code == 200
+    picked_codes = [code for stop in route["stops"] for code in stop["sample_codes"]]
+    assert response.json()["received_codes"] == picked_codes
+    with Session(engine) as session:
+        picked = session.scalars(select(RoutePickupModel.sample_id).order_by(RoutePickupModel.sample_id)).all()
+    assert sorted(assigner.sample_ids) == list(picked)
+    after = statuses(engine)
+    # Las 2 recibidas DEMO siguen igual y la de Córdoba sigue lista para retirar.
+    assert after["received"] == before["received"] + 4 == 6
+    assert after["ready_for_pickup"] == 1 and "with_transporter" not in after
+    done = my_route(http, engine).json()
+    assert done["status"] == "arrived" and done["on_board"] == [] and done["next_stop_id"] is None
+    repeated = arrive(http, route)
+    assert repeated.status_code == 409 and repeated.json()["detail"] == "La llegada de esta orden ya fue registrada."
+    assert len(assigner.sample_ids) == 4
+
+
+def test_an_unexpected_assigner_error_undoes_the_whole_arrival(transport, assigner):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    for index in range(3):
+        pick_up(http, route, index)
+    assigner.fail = True
+    with pytest.raises(RuntimeError, match="armado de lotes"):
+        arrive(http, route)
+    assert statuses(engine)["with_transporter"] == 4
+    assert my_route(http, engine).json()["status"] == "pending"
+
+
+def test_only_transport_roles_see_and_operate_the_route(transport):
+    http, engine, _optimizer = transport
+    route = ready_route(http, engine)
+    assert my_route(http, engine, user=SOFIA).status_code == 403
+    assert pick_up(http, route, 0, user=SOFIA).status_code == 403
+    assert arrive(http, route, user=SOFIA).status_code == 403
+    assert http.post(f"/api/transport/daily-routes/{route['id']}/arrival").status_code == 401
+    assert statuses(engine)["ready_for_pickup"] == 5
 
 
 # Adaptador HTTP del módulo de recorridos, con un transporte falso de httpx: no sale a internet.

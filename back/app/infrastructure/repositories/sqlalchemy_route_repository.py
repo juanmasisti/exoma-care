@@ -1,16 +1,22 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.domain.entities.logistics import DailyRouteStatus, SampleStatus
+from app.domain.entities.logistics import TIMEZONE, DailyRouteStatus, SampleStatus, study_code
 from app.domain.interfaces.route_repository import RouteAlreadyExists
 from app.infrastructure.database.logistics_models import (
-    AppointmentModel, DailyRouteModel, ExtractionCenterModel, ProvinceModel, RouteStopModel, SampleModel,
+    AppointmentModel, DailyRouteModel, ExtractionCenterModel, ProvinceModel, RoutePickupModel, RouteStopModel,
+    SampleModel,
 )
+
+
+def _local(at: datetime | None) -> datetime | None:
+    # En hora de Argentina, como el resto de las respuestas de logística: el front la muestra sin convertir.
+    return at.astimezone(TIMEZONE) if at is not None else None
 
 
 class SQLAlchemyRouteRepository:
@@ -66,8 +72,61 @@ class SQLAlchemyRouteRepository:
             .group_by(DailyRouteModel.id, ProvinceModel.name).order_by(ProvinceModel.name)
         )
         return [{"id": route.id, "date": route.date, "province_id": route.province_id, "province": province,
-                 "status": route.status, "arrived_at": route.arrived_at, "stops": stops, "picked_up": picked_up}
+                 "status": route.status, "arrived_at": _local(route.arrived_at), "stops": stops, "picked_up": picked_up}
                 for route, province, stops, picked_up in rows]
+
+    def route_detail(self, route_id: int) -> dict | None:
+        row = self.session.execute(select(DailyRouteModel, ProvinceModel.name)
+                                   .join(ProvinceModel, ProvinceModel.id == DailyRouteModel.province_id)
+                                   .where(DailyRouteModel.id == route_id)).first()
+        if row is None:
+            return None
+        route, province = row
+        stops = self.session.execute(
+            select(RouteStopModel, ExtractionCenterModel)
+            .join(ExtractionCenterModel, ExtractionCenterModel.id == RouteStopModel.center_id)
+            .where(RouteStopModel.route_id == route_id).order_by(RouteStopModel.sequence)
+        ).all()
+        return {"id": route.id, "date": route.date, "province_id": route.province_id, "province": province,
+                "status": route.status, "arrived_at": _local(route.arrived_at),
+                "stops": [{"id": stop.id, "sequence": stop.sequence, "picked_up_at": _local(stop.picked_up_at),
+                           "center": {"id": center.id, "name": center.name, "address": center.address,
+                                      "city": center.city},
+                           **self._stop_samples(stop)}
+                          for stop, center in stops]}
+
+    def _stop_samples(self, stop: RouteStopModel) -> dict:
+        # Antes del retiro, las que el centro tiene listas ahora; después, exactamente las que se retiraron.
+        if stop.picked_up_at is None:
+            query = (select(SampleModel.id, SampleModel.study_id)
+                     .join(AppointmentModel, AppointmentModel.id == SampleModel.appointment_id)
+                     .where(AppointmentModel.center_id == stop.center_id,
+                            SampleModel.status == SampleStatus.READY_FOR_PICKUP.value))
+        else:
+            query = (select(SampleModel.id, SampleModel.study_id)
+                     .join(RoutePickupModel, RoutePickupModel.sample_id == SampleModel.id)
+                     .where(RoutePickupModel.stop_id == stop.id))
+        rows = self.session.execute(query.order_by(SampleModel.id)).all()
+        return {"sample_ids": [sample_id for sample_id, _ in rows],
+                "sample_codes": [study_code(study_id) for _, study_id in rows]}
+
+    def mark_stop_picked(self, stop_id: int, at: datetime) -> bool:
+        # Condicional: de dos retiros a la vez del mismo centro, solo uno lo marca.
+        result = self.session.execute(update(RouteStopModel)
+                                      .where(RouteStopModel.id == stop_id, RouteStopModel.picked_up_at.is_(None))
+                                      .values(picked_up_at=at))
+        return result.rowcount == 1
+
+    def add_pickups(self, stop_id: int, sample_ids: list[int]) -> None:
+        self.session.add_all(RoutePickupModel(stop_id=stop_id, sample_id=sample_id) for sample_id in sample_ids)
+        self.session.flush()
+
+    def mark_arrived(self, route_id: int, at: datetime) -> bool:
+        result = self.session.execute(update(DailyRouteModel)
+                                      .where(DailyRouteModel.id == route_id,
+                                             DailyRouteModel.status == DailyRouteStatus.PENDING.value)
+                                      .values(status=DailyRouteStatus.ARRIVED.value, arrived_at=at))
+        return result.rowcount == 1
 
     def _record(self, route: DailyRouteModel) -> dict:
         stops = self.session.scalars(select(RouteStopModel).where(RouteStopModel.route_id == route.id)
