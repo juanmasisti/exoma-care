@@ -10,10 +10,13 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_database_session
 from app.api.routes.sample_sets import get_sample_set_assigner
 from app.api.routes.shipments import get_sample_set_closed_handler
+from app.infrastructure.database.models import Usuario
+from app.infrastructure.database.security import hash_password
 from app.infrastructure.database.session import Base
 from app.infrastructure.repositories.sqlalchemy_sample_repository import SQLAlchemySampleRepository
 from app.infrastructure.repositories.sqlalchemy_sample_set_repository import SQLAlchemySampleSetRepository
 from app.domain.interfaces.sample_set_repository import SetNotAssembling
+from app.main import app
 from app.use_cases.sample_sets import SampleSetService, pompe_reference_date
 
 NOW = datetime(2026, 11, 23, 15, 0, tzinfo=UTC)
@@ -311,3 +314,76 @@ def test_the_assigner_hook_runs_in_the_request_session_with_the_closed_handler_a
     assert handler.calls == [1, 1]  # una vez por pedido: el primero se deshizo
     with Session(engine) as session:
         assert statuses(session) == {1: "closed"}
+
+
+@pytest.fixture
+def http(engine, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "sample-sets-api-test-secret-at-least-32-bytes")
+    with Session(engine) as session:
+        for identifier, role in enumerate(["lab_administrator", "treating_physician"], 1):
+            session.add(Usuario(id=identifier, username=f"demo{identifier}", role=role, first_name="Demo",
+                                last_name="Prueba", phone="000", email=f"demo{identifier}@example.test",
+                                password_hash=hash_password("sample-sets-api-test-password")))
+        for sample_id in range(1, 13):
+            add_sample(session, sample_id)
+        # Un lote cerrado con 10 y uno armándose con 2, como los arma la llegada.
+        sample_sets = service(session)
+        for sample_id in range(1, 13):
+            sample_sets.asignar_a_sample_set(sample_id, NOW)
+        session.commit()
+
+    def database_session():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_database_session] = database_session
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
+
+
+def login(http, identifier=1):
+    response = http.post("/api/auth/login", json={"email": f"demo{identifier}@example.test",
+                                                  "password": "sample-sets-api-test-password"})
+    assert response.status_code == 200
+    return {"Authorization": "Bearer " + response.json()["access_token"]}
+
+
+def test_the_lab_administrator_lists_the_sets_by_status_in_argentina_time(http):
+    admin = login(http)
+    everything = http.get("/api/sample-sets", headers=admin).json()
+    assert [(s["id"], s["status"], s["sample_count"]) for s in everything] == [(2, "assembling", 2), (1, "closed", 10)]
+    closed = http.get("/api/sample-sets", params={"status": "closed"}, headers=admin).json()
+    assert closed == [{"id": 1, "status": "closed", "is_urgent": False, "created_at": "2026-11-23T12:00:00-03:00",
+                       "closed_at": "2026-11-23T12:00:00-03:00", "sample_count": 10}]
+    assert http.get("/api/sample-sets", params={"status": "awaiting_pickup"}, headers=admin).json() == []
+    assert http.get("/api/sample-sets", params={"status": "lost"}, headers=admin).status_code == 422
+
+
+def test_the_detail_shows_the_samples_by_slot_with_the_study_code_and_no_patient_data(http):
+    admin = login(http)
+    detail = http.get("/api/sample-sets/2", headers=admin).json()
+    assert detail == {"id": 2, "status": "assembling", "is_urgent": False, "created_at": "2026-11-23T12:00:00-03:00",
+                      "closed_at": None, "samples": [{"slot": 1, "sample_id": 11, "study_code": "EST-000011"},
+                                                     {"slot": 2, "sample_id": 12, "study_code": "EST-000012"}]}
+    closed = http.get("/api/sample-sets/1", headers=admin).json()
+    assert closed["closed_at"] == "2026-11-23T12:00:00-03:00" and len(closed["samples"]) == 10
+    missing = http.get("/api/sample-sets/99", headers=admin)
+    assert missing.status_code == 404 and missing.json()["detail"] == "El lote no existe."
+
+
+def test_only_the_lab_administrator_sees_the_sets(http):
+    doctor = login(http, 2)
+    assert http.get("/api/sample-sets", headers=doctor).status_code == 403
+    assert http.get("/api/sample-sets/1", headers=doctor).status_code == 403
+    assert http.get("/api/sample-sets").status_code == 401
+
+
+def test_an_urgent_set_says_so_in_the_list_and_the_detail(http, engine):
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE sample_sets SET is_urgent = 1 WHERE id = 1"))
+    admin = login(http)
+    assert [s["is_urgent"] for s in http.get("/api/sample-sets", headers=admin).json()] == [False, True]
+    assert http.get("/api/sample-sets/1", headers=admin).json()["is_urgent"] is True

@@ -81,3 +81,12 @@ class SampleSetService:
                 except (SetFull, SetNotAssembling):
                     break  # se llenó o lo cerró otro pedido: releer y, si hace falta, abrir otro
         raise RuntimeError("No se pudo sumar la muestra a un lote: demasiados choques seguidos.")
+
+    def list_sample_sets(self, status: str | None) -> list[dict]:
+        return self.sample_sets.list_by_status(status)
+
+    def sample_set(self, sample_set_id: int) -> dict:
+        sample_set = self.sample_sets.get(sample_set_id)
+        if sample_set is None:
+            raise LookupError("El lote no existe.")
+        return sample_set
