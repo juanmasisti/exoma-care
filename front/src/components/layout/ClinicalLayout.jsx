@@ -12,7 +12,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
   const superAdmin = session.role === 'super_admin'
   const labAdmin = session.role === 'lab_administrator'
   const transporter = TRANSPORT_ROLES.includes(session.role)
-  const physician = !patient && !manager && !bioinformatician && !superAdmin && !labAdmin
+  const physician = session.role === 'treating_physician'
   const roleLabel = patient ? 'Paciente' : manager ? 'Gerente médico' : bioinformatician ? 'Bioinformático' : superAdmin ? 'Super Admin' : labAdmin ? 'Administrativo' : 'Médico tratante'
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -112,7 +112,7 @@ export default function ClinicalLayout({ session, children, pageLabel, bioinform
         {physician && <NavLink to="/medico/pacientes" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           <Users size={19} aria-hidden="true" /><span><strong>Pacientes</strong><small>Gestión clínica y altas</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}
-        {!patient && !bioinformatician && !superAdmin && !labAdmin && <NavLink to="/catalogo/patologias" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
+        {(physician || manager) && <NavLink to="/catalogo/patologias" className={({ isActive }) => isActive ? 'clinical-nav-active' : 'clinical-nav-link'}>
           {manager ? <BookOpen size={19} aria-hidden="true" /> : <Stethoscope size={19} aria-hidden="true" />}
           <span><strong>{manager ? 'Catálogo de patologías' : 'Validación clínica'}</strong><small>Patologías y criterios</small></span><ChevronRight size={15} aria-hidden="true" />
         </NavLink>}

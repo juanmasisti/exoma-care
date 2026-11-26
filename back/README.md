@@ -155,3 +155,12 @@ nuevo fuera del repositorio:
 ```
 
 No usar `alembic stamp` ni ejecutar la reconciliación sin revisar el respaldo.
+
+
+### Catálogo clínico inicial
+
+El seed común carga criterios SNOMED versionados de CDSS, con cardinales múltiples.
+La búsqueda de síntomas sigue usando SNOMED remoto. Para bases ya existentes,
+consultar [actualización del catálogo](../docs/catalogo-patologias.md): inspeccionar
+con `python -m seeders catalog-upgrade` y aplicar explícitamente con `--apply` tras
+respaldar y migrar. No se sobrescriben criterios personalizados ni historias.

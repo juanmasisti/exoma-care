@@ -25,11 +25,18 @@ def main() -> None:
     parser.add_argument(
         "target",
         nargs="?",
-        choices=["all", *SEEDERS],
+        choices=["all", "catalog-upgrade", *SEEDERS],
         default="all",
         help="Seeder a ejecutar (por defecto: todos).",
     )
+    parser.add_argument("--apply", action="store_true", help="Aplicar catalog-upgrade; sin esta opción solo inspecciona.")
     args = parser.parse_args()
+    if args.target == "catalog-upgrade":
+        from seeders.catalog_upgrade import run
+        run(apply=args.apply)
+        return
+    if args.apply:
+        parser.error("--apply solo corresponde a catalog-upgrade")
 
     back_dir = Path(__file__).resolve().parents[1]
     alembic_config = Config(str(back_dir / "alembic.ini"))

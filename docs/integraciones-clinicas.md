@@ -72,7 +72,7 @@ Los conceptos históricos DEMO ya seleccionados se conservan, pero no se ofrecen
 
 El gerente consulta Apigen y CDSS desde el catálogo. Primero guarda o selecciona una definición local; luego asocia la identidad genética y, si corresponde, el código CDSS. La asociación no reemplaza síntomas ni modifica revisiones de pacientes. Una identidad externa no puede asignarse a dos definiciones locales y no puede reemplazarse desde esta pantalla una vez guardada.
 
-Los criterios de CDSS pueden prepararse explícitamente como borrador: se importan los conceptos, se elige un único cardinal y se revisan los secundarios. Los demás cardinales externos no se convierten en secundarios. Solo **Guardar** modifica la definición local. Los conceptos importados pueden permanecer en el catálogo local aunque se descarte el borrador.
+Los criterios de CDSS pueden prepararse explícitamente como borrador: se importan los conceptos, se incorporan todos los cardinales y se revisan los secundarios. Ningún cardinal se convierte en secundario. Solo **Guardar** modifica la definición local. Los conceptos importados pueden permanecer en el catálogo local aunque se descarte el borrador.
 
 El alta genética en Apigen es una operación externa separada. Requiere código, nombre, genes, herencia y confirmación. Si la respuesta se pierde, consultar el catálogo antes de reintentar: el alta pudo completarse. No existe una transacción conjunta entre Apigen y la base local. No se habilitan automáticamente todas las patologías externas ni se modifica la estrategia del grupo CDSS.
 
@@ -130,3 +130,16 @@ Desde `front`: `node --test --test-concurrency=1 tests/*.test.mjs`, `npm run lin
 Las pruebas usan proveedores simulados y bases temporales. El contrato del proveedor puede evolucionar; comprobar las integraciones reales con datos sintéticos cuando cambie.
 
 CDSS admite hasta 60 segundos de espera de lectura (70 segundos en el cliente web). Si vence, se informa la demora y se permite reintentar; no se realiza un reintento automático. Para generar un familiograma se indican los familiares sin nombres, apellidos o parentesco detallado y se deshabilita el botón hasta completarlos.
+
+
+## Preparación del catálogo y accesos
+
+La carga reproducible y la actualización de criterios están documentadas en
+[Catálogo de patologías](catalogo-patologias.md#snomed-cdss-y-configuración-local).
+Actualizar criterios locales no cambia la estrategia remota de CDSS ni publica
+patologías en Apigen. Las migraciones de datos iniciales no modifican fichas.
+
+El acceso clínico está reservado al médico; catálogo de lectura, al médico y al
+gerente; edición, al gerente. La administración de usuarios no concede acceso
+clínico al superadministrador. Las rutas y menús reflejan esas restricciones y
+el backend las verifica independientemente.

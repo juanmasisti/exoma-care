@@ -51,7 +51,7 @@ beforeEach(() => {
     } else if (['post', 'put'].includes(config.method)) {
       if (duplicate) throw new AxiosError('duplicate', 'ERR_BAD_REQUEST', config, null, { status: 409, data: { detail: 'Ya existe una patología con ese nombre.' } })
       const id = config.method === 'put' ? Number(config.url.split('/').at(-1)) : 1
-      data = { id, name: body.name, cardinal_symptom: terms.find((s) => s.id === body.cardinal_symptom_id), secondary_symptoms: body.secondary_symptom_ids.map((id) => terms.find((s) => s.id === id)) }
+      data = { id, name: body.name, cardinal_symptoms: body.cardinal_symptom_ids.map(id => terms.find(s => s.id === id)), cardinal_symptom: terms.find((s) => s.id === body.cardinal_symptom_ids[0]), secondary_symptoms: body.secondary_symptom_ids.map((id) => terms.find((s) => s.id === id)) }
       pathologies = [...pathologies.filter((p) => p.id !== id), data]
     } else throw new Error(`Petición inesperada: ${config.method} ${config.url}`)
     return { data, status: 200, statusText: 'OK', headers: {}, config }
@@ -107,7 +107,7 @@ test('el gerente crea una patología con cardinal y secundarios sin duplicados',
   await click(button('Guardar patología'))
   assert.match(container.textContent, /Patología guardada correctamente/)
   const request = requests.find((r) => r.method === 'post' && r.url === '/pathologies')
-  assert.deepEqual(request.body, { name: 'Nueva demo', cardinal_symptom_id: 1, secondary_symptom_ids: [2, 3] })
+  assert.deepEqual(request.body, { name: 'Nueva demo', cardinal_symptom_ids: [1], secondary_symptom_ids: [2, 3] })
   assert.equal(button('Nueva demo').getAttribute('aria-current'), 'true')
 })
 
@@ -120,7 +120,7 @@ test('la edición conserva el ID y reemplaza la configuración', async () => {
   const request = requests.find((r) => r.method === 'put')
   assert.equal(request.url, '/pathologies/1')
   assert.equal(request.body.name, 'Demo editada')
-  assert.equal(request.body.cardinal_symptom_id, 2)
+  assert.deepEqual(request.body.cardinal_symptom_ids, [1, 2])
   assert.deepEqual(request.body.secondary_symptom_ids, [3])
 })
 

@@ -22,10 +22,17 @@ class Pathology:
     apigen_group: str | None = None
     cdss_code: str | None = None
 
+    additional_cardinal_symptoms: tuple[Symptom, ...] = ()
+
+    @property
+    def cardinal_symptoms(self):
+        return (self.cardinal_symptom, *self.additional_cardinal_symptoms)
+
     def definition(self) -> PathologyDefinition:
         return PathologyDefinition(
             self.name, self.cardinal_symptom.id,
             frozenset(s.id for s in self.secondary_symptoms),
+            frozenset(s.id for s in self.additional_cardinal_symptoms),
         )
 
 

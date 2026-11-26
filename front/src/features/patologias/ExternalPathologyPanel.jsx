@@ -16,7 +16,6 @@ export default function ExternalPathologyPanel({ pathology, onLinked, onCriteria
   const [geneQuery, setGeneQuery] = useState('')
   const [genes, setGenes] = useState([])
   const [criteria, setCriteria] = useState(null)
-  const [cardinal, setCardinal] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const chosen = genetic.find((p) => `${p.de_grupo}:${p.codigo}` === selected)
   async function action(fn) {
@@ -45,10 +44,10 @@ export default function ExternalPathologyPanel({ pathology, onLinked, onCriteria
       <p>Verificá ambos códigos. Una patología genética puede no estar cubierta por CDSS.</p>
       <button type="button" className="catalog-primary" disabled={disabled || busy || !pathology || !chosen} onClick={() => action(async () => { const saved = await linkPathology(pathology.id, { apigen_code: chosen.codigo, de_grupo: chosen.de_grupo, cdss_code: cdssCode || null }); if (!mounted.current) return; onLinked(saved); setNotice('Identidad externa asociada. Se conservaron los criterios clínicos.'); })}>Asociar identidad externa</button>
     </>}
-    {clinical.length > 0 && <details><summary>Consultar criterios externos CDSS</summary><p>Referencia externa; no modifica las reglas locales.</p>{clinical.map((p) => <details key={p.codigo}><summary>{p.codigo} · {p.nombre}</summary><button type="button" disabled={disabled || busy} onClick={() => action(async () => { setCriteria(await importCDSSDraft(p.codigo)); setCardinal(''); })}>Preparar criterios de {p.codigo}</button><ul>{p.sintomas.map((s) => <li key={s.snomed_codigo}>{s.termino} · {s.snomed_codigo} {s.es_cardinal ? '(cardinal)' : '(secundario)'}</li>)}</ul></details>)}</details>}
-    {criteria && <div><h3>Preparar criterios de {criteria.codigo}</h3><p>Elegí un único cardinal. Los demás cardinales externos no se convierten automáticamente en secundarios. Esto reemplaza el borrador; revisalo y guardá para aplicar cambios.</p>
-      <label>Cardinal del borrador<select aria-label="Cardinal del borrador" value={cardinal} onChange={(e) => setCardinal(e.target.value)}><option value="">Seleccioná un cardinal</option>{criteria.cardinals.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label>
-      <button type="button" disabled={disabled || !cardinal || busy} onClick={() => { onCriteriaDraft(criteria.cardinals.find((s) => String(s.id) === cardinal), criteria.secondary); setNotice('Criterios preparados en el borrador. Revisá y guardá la patología local.'); setCriteria(null); }}>Usar criterios en el borrador local</button>
+    {clinical.length > 0 && <details><summary>Consultar criterios externos CDSS</summary><p>Referencia externa; no modifica las reglas locales.</p>{clinical.map((p) => <details key={p.codigo}><summary>{p.codigo} · {p.nombre}</summary><button type="button" disabled={disabled || busy} onClick={() => action(async () => { setCriteria(await importCDSSDraft(p.codigo)); })}>Preparar criterios de {p.codigo}</button><ul>{p.sintomas.map((s) => <li key={s.snomed_codigo}>{s.termino} · {s.snomed_codigo} {s.es_cardinal ? '(cardinal)' : '(secundario)'}</li>)}</ul></details>)}</details>}
+    {criteria && <div><h3>Preparar criterios de {criteria.codigo}</h3><p>Se incorporan todos los cardinales y secundarios de CDSS. Revisá el borrador y guardá para aplicar.</p>
+      <ul>{criteria.cardinals.map(s => <li key={s.id}>{s.label} · Cardinal</li>)}</ul>
+      <button type="button" disabled={disabled || !criteria.cardinals.length || busy} onClick={() => { onCriteriaDraft(criteria.cardinals, criteria.secondary); setNotice('Criterios preparados en el borrador. Revisá y guardá la patología local.'); setCriteria(null); }}>Usar criterios en el borrador local</button>
     </div>}
     <details><summary>Crear patología genética del grupo en Apigen</summary>
       <p>Esta acción escribe en Apigen. Después deberás asociar el código a una definición clínica local. Si la respuesta falla, actualizá el catálogo antes de repetir el alta.</p>

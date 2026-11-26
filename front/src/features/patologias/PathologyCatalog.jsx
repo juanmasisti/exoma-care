@@ -34,7 +34,7 @@ export default function PathologyCatalog({ session }) {
 
   function choose(item) {
     setSelected(item)
-    setForm(item ? { name: item.name, cardinal: [item.cardinal_symptom], secondary: item.secondary_symptoms } : emptyForm())
+    setForm(item ? { name: item.name, cardinal: (item.cardinal_symptoms ?? [item.cardinal_symptom]), secondary: item.secondary_symptoms } : emptyForm())
     setError(''); setNotice('')
   }
 
@@ -43,7 +43,7 @@ export default function PathologyCatalog({ session }) {
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await savePathology(selected?.id, {
-        name: form.name.trim(), cardinal_symptom_id: form.cardinal[0].id,
+        name: form.name.trim(), cardinal_symptom_ids: form.cardinal.map((s) => s.id),
         secondary_symptom_ids: form.secondary.map((term) => term.id),
       })
       setItems((current) => [...current.filter((item) => item.id !== result.id), result]
@@ -56,7 +56,7 @@ export default function PathologyCatalog({ session }) {
   }
 
   const filtered = items.filter((item) => item.name.toLocaleLowerCase('es').includes(search.trim().toLocaleLowerCase('es')))
-  const checkerKey = selected && `${selected.id}-${selected.cardinal_symptom.id}-${selected.secondary_symptoms.map((s) => s.id).join(',')}-${selected.name}`
+  const checkerKey = selected && `${selected.id}-${(selected.cardinal_symptoms ?? [selected.cardinal_symptom]).map(s => s.id).join(",")}-${selected.secondary_symptoms.map((s) => s.id).join(',')}-${selected.name}`
 
   return <ClinicalLayout session={session}><section className="catalog-page">
     <header className="catalog-header">
@@ -76,7 +76,6 @@ export default function PathologyCatalog({ session }) {
       <div><span className="catalog-summary-icon"><Layers size={20} aria-hidden="true" /></span><span><strong>2 secundarios distintos</strong><small>Alternativa cuando no hay cardinal</small></span></div>
     </div>
 
-    <aside className="catalog-demo-note"><Info size={17} aria-hidden="true" /><p><strong>Entorno de demostración.</strong> Los conceptos DEMO son ficticios y no corresponden a SNOMED. No uses datos de pacientes reales.</p></aside>
 
     {loading ? <div role="status" className="catalog-loading"><RefreshCw size={21} aria-hidden="true" /><span>Cargando catálogo...</span></div> : <div className="catalog-layout">
       <nav className="catalog-card catalog-sidebar" aria-label="Patologías">
@@ -87,7 +86,7 @@ export default function PathologyCatalog({ session }) {
           : filtered.length === 0 ? <p className="catalog-muted catalog-list-empty">No se encontraron patologías con esa búsqueda.</p>
             : <ul className="catalog-pathology-list">{filtered.map((item) => <li key={item.id}><button type="button" disabled={busy} aria-label={item.name}
               className={selected?.id === item.id ? 'catalog-selected' : ''} aria-current={selected?.id === item.id ? 'true' : undefined} onClick={() => choose(item)}>
-              <span><strong>{item.name}</strong><small>1 cardinal · {item.secondary_symptoms.length} secundarios</small></span><ChevronRight size={17} aria-hidden="true" />
+              <span><strong>{item.name}</strong><small>{(item.cardinal_symptoms ?? [item.cardinal_symptom]).length} cardinales · {item.secondary_symptoms.length} secundarios</small></span><ChevronRight size={17} aria-hidden="true" />
             </button></li>)}</ul>}
         <div className="catalog-sidebar-note"><ShieldCheck size={15} aria-hidden="true" /><span>{canEdit ? 'Los cambios se aplican a futuras validaciones.' : 'Consulta disponible para el médico tratante.'}</span></div>
       </nav>
@@ -102,18 +101,18 @@ export default function PathologyCatalog({ session }) {
             <label htmlFor="pathology-name">Nombre de la patología <span aria-hidden="true">*</span></label>
             <input id="pathology-name" value={form.name} maxLength={160} required placeholder="Ingresá el nombre de la patología" onChange={(event) => setForm({ ...form, name: event.target.value })} />
             <div className="catalog-form-section"><span className="catalog-step">02</span><div><h3>Criterios de validación</h3><p className="catalog-muted">Seleccioná conceptos del catálogo de terminología.</p></div></div>
-            <SymptomPicker label="Síntoma cardinal" selected={form.cardinal} onChange={(terms) => setForm({ ...form, cardinal: terms, secondary: form.secondary.filter((s) => s.id !== terms[0]?.id) })} />
+            <SymptomPicker multiple label="Síntoma cardinal" selected={form.cardinal} onChange={(terms) => setForm({ ...form, cardinal: terms, secondary: form.secondary.filter((s) => !terms.some(t => t.id === s.id)) })} />
             <SymptomPicker label="Síntomas secundarios" multiple selected={form.secondary} excludeIds={form.cardinal.map((s) => s.id)} onChange={(terms) => setForm({ ...form, secondary: terms })} />
-            <div className="catalog-rule-note"><Info size={16} aria-hidden="true" /><p>El cardinal es obligatorio y no puede repetirse como secundario. Una patología puede guardarse sin síntomas secundarios.</p></div>
+            <div className="catalog-rule-note"><Info size={16} aria-hidden="true" /><p>Seleccioná al menos un cardinal. Ninguno puede repetirse como secundario. Una patología puede guardarse sin síntomas secundarios.</p></div>
             <div className="catalog-form-footer"><span>* Campo obligatorio</span><button className="catalog-primary" disabled={busy || !form.name.trim() || form.cardinal.length === 0}><Save size={16} aria-hidden="true" />{busy ? 'Guardando...' : 'Guardar patología'}</button></div>
           </fieldset></form>
         </section> : selected ? <section className="catalog-card" aria-labelledby="selected-pathology-heading">
           <div className="catalog-section-heading"><span className="catalog-section-icon"><Dna size={20} aria-hidden="true" /></span><div><span className="catalog-eyebrow">CRITERIOS DE LA PATOLOGÍA</span><h2 id="selected-pathology-heading">{selected.name}</h2></div></div>
-          <div className="catalog-cardinal"><span className="catalog-label"><ShieldCheck size={15} aria-hidden="true" />Síntoma cardinal</span><strong>{selected.cardinal_symptom.label}</strong><small>{selected.cardinal_symptom.code_system}: {selected.cardinal_symptom.code}</small></div>
+          <div className="catalog-cardinal"><span className="catalog-label"><ShieldCheck size={15} aria-hidden="true" />Síntoma cardinal</span>{(selected.cardinal_symptoms ?? [selected.cardinal_symptom]).map(term => <div key={term.id}><strong>{term.label}</strong><small>{term.code_system}: {term.code}</small></div>)}</div>
           <h3 className="catalog-secondary-heading">Síntomas secundarios <span className="catalog-count">{selected.secondary_symptoms.length}</span></h3>
           {selected.secondary_symptoms.length ? <ul className="catalog-criteria-list">{selected.secondary_symptoms.map((term) => <li key={term.id}><span className="catalog-criteria-dot" aria-hidden="true" /><span><strong>{term.label}</strong><small>{term.code_system}: {term.code}</small></span></li>)}</ul> : <p className="catalog-muted">No tiene secundarios configurados.</p>}
         </section> : <section className="catalog-card catalog-welcome"><span className="catalog-welcome-icon"><FileSearch size={36} aria-hidden="true" /></span><span className="catalog-eyebrow">CONSULTA DEL CATÁLOGO</span><h2>Comenzá seleccionando una patología</h2><p>Revisá su síntoma cardinal y sus síntomas secundarios. Después podés comprobar la coherencia de una sospecha clínica.</p><span className="catalog-welcome-hint"><ArrowRight size={15} aria-hidden="true" />Elegí una patología del listado</span></section>}
-        {canEdit && <ExternalPathologyPanel disabled={busy} key={selected?.id ?? "new"} pathology={selected} onCriteriaDraft={(cardinal, secondary) => setForm((form) => ({ ...form, cardinal: [cardinal], secondary }))} onLinked={(saved) => { setSelected(saved); setItems((items) => items.map((item) => item.id === saved.id ? saved : item)) }} />}
+        {canEdit && <ExternalPathologyPanel disabled={busy} key={selected?.id ?? "new"} pathology={selected} onCriteriaDraft={(cardinal, secondary) => setForm((form) => ({ ...form, cardinal: Array.isArray(cardinal) ? cardinal : [cardinal], secondary }))} onLinked={(saved) => { setSelected(saved); setItems((items) => items.map((item) => item.id === saved.id ? saved : item)) }} />}
         {selected && <SuspicionChecker key={checkerKey} pathology={selected} />}
       </div>
     </div>}

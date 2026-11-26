@@ -10,7 +10,8 @@ from app.infrastructure.database.session import SessionLocal
 
 
 def seed() -> int:
-    return seed_demo_pathologies()
+    from seeders.clinical_catalog import seed as seed_clinical
+    return seed_clinical()
 
 
 def seed_demo_pathologies(session_factory=SessionLocal) -> int:
