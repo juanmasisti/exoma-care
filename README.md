@@ -38,9 +38,30 @@ La etapa de relevamiento de requerimientos y elaboración del prototipo de soluc
 
 Las tecnologías y herramientas definitivas se documentarán a medida que se consolide la implementación.
 
+## Autenticación del backend
+
+El backend expone `POST /api/auth/login`. Para ejecutarlo desde `back`, configura
+la variable de entorno `JWT_SECRET_KEY` con una clave aleatoria segura y luego
+inicia la aplicación con `uvicorn app.main:app`. El endpoint devuelve un token
+Bearer; para usuarios con rol Paciente también devuelve
+`redirect_to: "/paciente/dashboard"`.
+
 ## Organización del repositorio
 
-La estructura de directorios y los componentes principales se documentarán a medida que avance el desarrollo.
+El repositorio separa el frontend (`front`) del backend (`back`). Cada carpeta
+propia del proyecto tiene un `README.md` que describe su responsabilidad y qué
+archivos se esperan allí. Los directorios generados o administrados por
+herramientas (`node_modules`, `.venv`, `dist` y cachés) no forman parte de esta
+arquitectura.
+
+- [Frontend](./front/README.md): aplicación React y Vite.
+- [Backend](./back/README.md): API FastAPI organizada por capas.
+
+En el frontend, `features` contiene funcionalidades completas de páginas y sus
+elementos propios. `components` se reserva para piezas de interfaz genéricas y
+reutilizables; un `widget` representa una parte funcional más específica que
+puede compartirse entre páginas. Si solo se usa dentro de una funcionalidad,
+debe permanecer dentro de esa feature.
 
 ## Equipo
 

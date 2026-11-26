@@ -1,0 +1,81 @@
+.bioinformatics-page { padding: 30px 32px 48px; color: #0f172a; }
+.bioinformatics-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+.bioinformatics-eyebrow { margin: 0 0 8px; color: #4f46e5; font-size: 10px; font-weight: 750; letter-spacing: 1.1px; }
+.bioinformatics-page h1 { margin: 0 0 8px; font-size: clamp(24px, 2.4vw, 32px); }
+.bioinformatics-page h2 { margin: 0; font-size: 17px; }
+.bioinformatics-page h3 { margin: 0; font-size: 14px; }
+.bioinformatics-header p:last-child, .bioinformatics-section-heading p { margin: 4px 0 0; color: #64748b; font-size: 12px; line-height: 1.6; }
+.bioinformatics-page button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #dbe3ee; border-radius: 8px; padding: 9px 12px; color: #334155; background: #fff; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.bioinformatics-page button:disabled { opacity: .55; cursor: not-allowed; }
+.bioinformatics-page button:focus-visible, .bioinformatics-page input:focus-visible { outline: 3px solid #a5b4fc; outline-offset: 2px; }
+.bioinformatics-page .bioinformatics-primary { border-color: #4f46e5; color: #fff; background: #4f46e5; }
+.bioinformatics-error, .bioinformatics-notice { display: flex; align-items: flex-start; gap: 9px; border-radius: 9px; padding: 12px 15px; margin: 0 0 18px; font-size: 12px; line-height: 1.6; }
+.bioinformatics-error { color: #9f1239; border: 1px solid #fecdd3; background: #fff1f2; }
+.bioinformatics-notice { color: #166534; border: 1px solid #bbf7d0; background: #f0fdf4; }
+.bioinformatics-dashboard-content, .bioinformatics-section { display: grid; gap: 20px; }
+.bioinformatics-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.bioinformatics-page .bioinformatics-stat { display: grid; justify-items: start; gap: 7px; min-height: 130px; padding: 20px; border-color: #e0e7ff; text-align: left; box-shadow: 0 2px 6px #0f172a08; }
+.bioinformatics-stat > span { color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .45px; }
+.bioinformatics-stat strong { color: #312e81; font-size: 30px; line-height: 1; }
+.bioinformatics-stat small { color: #64748b; font-size: 11px; font-weight: 400; }
+.bioinformatics-section { padding: 20px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 2px 6px #0f172a05; }
+.bioinformatics-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.bioinformatics-filter { display: flex; align-items: center; gap: 8px; min-width: min(390px, 100%); padding: 0 10px; border: 1px solid #e0e7ff; border-radius: 9px; color: #64748b; background: #f8f9ff; }
+.bioinformatics-page .bioinformatics-filter input { min-width: 0; min-height: 40px; padding-inline: 0; border: 0; outline: 0; background: transparent; box-shadow: none; }
+.bioinformatics-filter button { flex-shrink: 0; }
+.bioinformatics-cards { display: grid; gap: 13px; }
+.bioinformatics-study-card { min-width: 0; padding: 17px; border: 1px solid #e2e8f0; border-radius: 11px; background: #fff; }
+.bioinformatics-study-card-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bioinformatics-study-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.bioinformatics-study-title > div { display: grid; gap: 4px; }
+.bioinformatics-study-title > div > span { color: #64748b; font-size: 12px; }
+.bioinformatics-study-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 10px; color: #4338ca; background: #eef2ff; }
+.bioinformatics-status { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; color: #4338ca; background: #eef2ff; font-size: 10px; font-weight: 700; }
+.bioinformatics-status.is-complete { color: #0f766e; background: #ccfbf1; }
+.bioinformatics-study-meta { display: flex; flex-wrap: wrap; gap: 9px 17px; margin: 13px 0; color: #64748b; font-size: 11px; }
+.bioinformatics-study-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.bioinformatics-study-actions { display: flex; justify-content: flex-end; margin-top: 13px; }
+.bioinformatics-details { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+.bioinformatics-details summary { display: flex; align-items: center; gap: 7px; color: #4338ca; font-size: 11px; font-weight: 700; cursor: pointer; }
+.bioinformatics-patient-details { display: grid; gap: 13px; padding-top: 13px; }
+.bioinformatics-data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.bioinformatics-data-field { min-width: 0; padding: 10px; border-radius: 8px; background: #f8fafc; }
+.bioinformatics-data-field span { display: block; margin-bottom: 5px; color: #64748b; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.bioinformatics-data-field strong { display: block; color: #1e293b; font-size: 11px; font-weight: 550; overflow-wrap: anywhere; white-space: pre-wrap; }
+.bioinformatics-related-record { padding: 11px; border-radius: 8px; background: #f8fafc; }
+.bioinformatics-related-record h3, .bioinformatics-result-details h3 { margin-bottom: 8px; color: #334155; font-size: 11px; }
+.bioinformatics-related-record p, .bioinformatics-related-record small { display: block; margin: 5px 0 0; color: #475569; font-size: 11px; }
+.bioinformatics-related-record ul, .bioinformatics-result-details ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: #475569; font-size: 11px; }
+.bioinformatics-result-details { display: grid; gap: 8px; margin-top: 13px; padding: 12px; border-radius: 8px; background: #f8fafc; }
+.bioinformatics-result-details p { margin: 0; color: #475569; font-size: 11px; }
+.bioinformatics-result-details section { display: grid; gap: 8px; }
+.bioinformatics-study-card .bioinformatics-variant-list { margin-top: 0; }
+.bioinformatics-empty { display: grid; justify-items: center; gap: 8px; min-height: 150px; align-content: center; color: #64748b; text-align: center; font-size: 12px; }
+.bioinformatics-empty p { margin: 0; }
+.bioinformatics-selection-hint, .bioinformatics-history-note { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 11px; }
+.bioinformatics-analysis-panel { margin-top: 22px; border-color: #c7d2fe; }
+.bioinformatics-search-form, .bioinformatics-results-form { display: grid; gap: 9px; margin-top: 17px; }
+.bioinformatics-pathology-select { display: grid; gap: 9px; }
+.bioinformatics-page label { color: #334155; font-size: 11px; font-weight: 650; }
+.bioinformatics-pathology-options { display: grid; gap: 4px; max-height: 220px; overflow-y: auto; margin: -4px 0 0; padding: 5px; border: 1px solid #cbd5e1; border-radius: 7px; list-style: none; }
+.bioinformatics-pathology-options button { width: 100%; padding: 8px; border: 0; border-radius: 5px; color: #334155; background: #fff; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+.bioinformatics-pathology-options button:hover, .bioinformatics-pathology-options button:focus-visible { background: #eff6ff; outline: 2px solid #93c5fd; }
+.bioinformatics-pathology-no-results { padding: 8px; color: #64748b; font-size: 11px; }
+.bioinformatics-pathology-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: #64748b; font-size: 11px; }
+.bioinformatics-pathology-pagination > div { display: flex; align-items: center; gap: 8px; }
+.bioinformatics-pathology-pagination button, .bioinformatics-pathology-select button { min-height: 30px; padding: 5px 9px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff; font: inherit; cursor: pointer; }
+.bioinformatics-pathology-pagination button:disabled { opacity: .5; cursor: not-allowed; }
+.bioinformatics-page input:not([type="checkbox"]), .bioinformatics-page select { width: 100%; min-height: 39px; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 7px; color: #0f172a; background: #fff; font: inherit; font-size: 12px; }
+.bioinformatics-pathology-select p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
+.bioinformatics-pathology-select [role="alert"] { color: #9f1239; }
+.bioinformatics-variant-list { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
+.bioinformatics-variant-list li { padding: 11px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.bioinformatics-variant-list li label { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.bioinformatics-variant-list li label > span { display: grid; gap: 4px; }
+.bioinformatics-variant-list strong { font-size: 12px; }
+.bioinformatics-variant-list small { color: #64748b; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.bioinformatics-variant-list input[type="checkbox"] { margin-top: 2px; accent-color: #4f46e5; }
+.bioinformatics-muted { margin: 0; color: #64748b; font-size: 11px; }
+.bioinformatics-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+@media (max-width: 850px) { .bioinformatics-page { padding-inline: 22px; } .bioinformatics-stats { grid-template-columns: 1fr; } .bioinformatics-data-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .bioinformatics-page { padding: 20px 14px 32px; } .bioinformatics-header { flex-direction: column; } .bioinformatics-section-heading { align-items: stretch; flex-direction: column; } .bioinformatics-filter { min-width: 0; width: 100%; } .bioinformatics-study-card-main { align-items: flex-start; flex-direction: column; } .bioinformatics-data-grid { grid-template-columns: 1fr; } }

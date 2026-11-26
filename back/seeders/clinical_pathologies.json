@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "source": "CDSS GET /api/v1/patologias; Apigen listar_patologias (catálogo base)",
+  "retrieved_on": "2026-11-24",
+  "pathologies": [
+    {
+      "key": "fabry",
+      "name": "Enfermedad de Fabry",
+      "apigen_code": "FABRY",
+      "cdss_code": "FABRY",
+      "cardinal": {
+        "code": "247398009",
+        "label": "Dolor neuropático"
+      },
+      "cardinal_candidates": [
+        {
+          "code": "247398009",
+          "label": "Dolor neuropático"
+        }
+      ],
+      "secondary": [
+        {
+          "code": "21522001",
+          "label": "Dolor abdominal"
+        },
+        {
+          "code": "230690007",
+          "label": "Accidente cerebrovascular"
+        },
+        {
+          "code": "29738008",
+          "label": "Proteinuria"
+        },
+        {
+          "code": "55827005",
+          "label": "Hipertrofia ventricular izquierda"
+        },
+        {
+          "code": "60862001",
+          "label": "Acúfenos"
+        },
+        {
+          "code": "62315008",
+          "label": "Diarrea"
+        },
+        {
+          "code": "64634000",
+          "label": "Opacidad corneal"
+        }
+      ],
+      "additional_cardinals": []
+    },
+    {
+      "key": "pompe",
+      "name": "Enfermedad de Pompe",
+      "apigen_code": "POMPE",
+      "cdss_code": "POMPE",
+      "cardinal": {
+        "code": "233873004",
+        "label": "Miocardiopatía hipertrófica"
+      },
+      "cardinal_candidates": [
+        {
+          "code": "233873004",
+          "label": "Miocardiopatía hipertrófica"
+        },
+        {
+          "code": "398152000",
+          "label": "Hipotonía"
+        }
+      ],
+      "secondary": [
+        {
+          "code": "25273001",
+          "label": "Macroglosia"
+        },
+        {
+          "code": "26544005",
+          "label": "Debilidad muscular"
+        },
+        {
+          "code": "409623005",
+          "label": "Insuficiencia respiratoria"
+        },
+        {
+          "code": "78164000",
+          "label": "Dificultad para alimentarse"
+        },
+        {
+          "code": "80515008",
+          "label": "Hepatomegalia"
+        },
+        {
+          "code": "8186001",
+          "label": "Cardiomegalia"
+        }
+      ],
+      "additional_cardinals": [
+        {
+          "code": "398152000",
+          "label": "Hipotonía"
+        }
+      ]
+    },
+    {
+      "key": "mpsi",
+      "name": "Mucopolisacaridosis tipo I",
+      "apigen_code": "MPS1",
+      "cdss_code": "MPS1",
+      "cardinal": {
+        "code": "64634000",
+        "label": "Opacidad corneal"
+      },
+      "cardinal_candidates": [
+        {
+          "code": "64634000",
+          "label": "Opacidad corneal"
+        }
+      ],
+      "secondary": [
+        {
+          "code": "237837007",
+          "label": "Talla baja"
+        },
+        {
+          "code": "248290002",
+          "label": "Retraso del desarrollo"
+        },
+        {
+          "code": "36760000",
+          "label": "Hepatoesplenomegalia"
+        },
+        {
+          "code": "396232000",
+          "label": "Hernia inguinal"
+        },
+        {
+          "code": "396347007",
+          "label": "Hernia umbilical"
+        },
+        {
+          "code": "65363002",
+          "label": "Otitis media"
+        },
+        {
+          "code": "84445001",
+          "label": "Rigidez articular"
+        }
+      ],
+      "additional_cardinals": []
+    },
+    {
+      "key": "gaucher",
+      "name": "Enfermedad de Gaucher",
+      "apigen_code": "GAUCHER",
+      "cdss_code": "GAUCHER",
+      "cardinal": {
+        "code": "16294009",
+        "label": "Esplenomegalia"
+      },
+      "cardinal_candidates": [
+        {
+          "code": "16294009",
+          "label": "Esplenomegalia"
+        }
+      ],
+      "secondary": [
+        {
+          "code": "12584003",
+          "label": "Dolor óseo"
+        },
+        {
+          "code": "271737000",
+          "label": "Anemia"
+        },
+        {
+          "code": "302215000",
+          "label": "Trombocitopenia"
+        },
+        {
+          "code": "80515008",
+          "label": "Hepatomegalia"
+        },
+        {
+          "code": "84229001",
+          "label": "Fatiga"
+        }
+      ],
+      "additional_cardinals": []
+    },
+    {
+      "key": "asmd",
+      "name": "ASMD",
+      "apigen_code": "ASMD",
+      "cdss_code": "ASMD",
+      "cardinal": {
+        "code": "36760000",
+        "label": "Hepatoesplenomegalia"
+      },
+      "cardinal_candidates": [
+        {
+          "code": "36760000",
+          "label": "Hepatoesplenomegalia"
+        }
+      ],
+      "secondary": [
+        {
+          "code": "16294009",
+          "label": "Esplenomegalia"
+        },
+        {
+          "code": "233703007",
+          "label": "Enfermedad pulmonar intersticial"
+        },
+        {
+          "code": "237837007",
+          "label": "Talla baja"
+        },
+        {
+          "code": "302215000",
+          "label": "Trombocitopenia"
+        },
+        {
+          "code": "80515008",
+          "label": "Hepatomegalia"
+        }
+      ],
+      "additional_cardinals": []
+    }
+  ]
+}

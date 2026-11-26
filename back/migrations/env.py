@@ -1,0 +1,23 @@
+from alembic import context
+from sqlalchemy import create_engine, pool
+
+from app.config import get_settings
+from app.infrastructure.database.session import Base
+from app.infrastructure.database import models, catalog_models, patient_clinical_models, family_models, logistics_models, study_models  # noqa: F401
+
+url = get_settings().database_url
+
+if context.is_offline_mode():
+    context.configure(url=url, target_metadata=Base.metadata, literal_binds=True)
+    with context.begin_transaction():
+        context.run_migrations()
+else:
+    engine = create_engine(url, poolclass=pool.NullPool)
+    with engine.connect() as connection:
+        from app.infrastructure.database.reconcile_clinical_revision import legacy_revision
+        if legacy_revision(connection):
+            raise RuntimeError("Base clínica previa al merge: ejecutar python -m app.infrastructure.database.reconcile_clinical_revision antes de migrar.")
+        connection.rollback()
+        context.configure(connection=connection, target_metadata=Base.metadata)
+        with context.begin_transaction():
+            context.run_migrations()
