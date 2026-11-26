@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from app.api.catalog_dependencies import get_catalog, require_roles
 from app.domain.entities.roles import UserRole
@@ -23,6 +23,7 @@ class PathologyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    cardinal_symptoms: list[SymptomResponse]
     cardinal_symptom: SymptomResponse
     secondary_symptoms: list[SymptomResponse]
     apigen_code: str | None = None
@@ -33,7 +34,15 @@ class PathologyResponse(BaseModel):
 class PathologyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=160)
-    cardinal_symptom_id: PositiveInt
+    cardinal_symptom_id: PositiveInt | None = None
+    cardinal_symptom_ids: list[PositiveInt] | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def cardinal_input(self):
+        if (self.cardinal_symptom_id is None) == (self.cardinal_symptom_ids is None):
+            raise ValueError("Indicá cardinal_symptom_ids o cardinal_symptom_id, no ambos.")
+        return self
+
     secondary_symptom_ids: list[PositiveInt] = Field(default_factory=list, max_length=100)
 
 
@@ -78,7 +87,7 @@ def pathology(pathology_id: PositiveInt, catalog: PathologyCatalog = Depends(get
 @router.post("/pathologies", response_model=PathologyResponse, status_code=201, dependencies=[Depends(write_catalog)])
 def create_pathology(body: PathologyRequest, catalog: PathologyCatalog = Depends(get_catalog)):
     try:
-        return catalog.save(body.name, body.cardinal_symptom_id, body.secondary_symptom_ids)
+        return catalog.save(body.name, body.cardinal_symptom_ids or body.cardinal_symptom_id, body.secondary_symptom_ids)
     except (ValueError, LookupError) as exc:
         translate_error(exc)
 
@@ -86,7 +95,7 @@ def create_pathology(body: PathologyRequest, catalog: PathologyCatalog = Depends
 @router.put("/pathologies/{pathology_id}", response_model=PathologyResponse, dependencies=[Depends(write_catalog)])
 def update_pathology(pathology_id: PositiveInt, body: PathologyRequest, catalog: PathologyCatalog = Depends(get_catalog)):
     try:
-        return catalog.save(body.name, body.cardinal_symptom_id, body.secondary_symptom_ids, pathology_id)
+        return catalog.save(body.name, body.cardinal_symptom_ids or body.cardinal_symptom_id, body.secondary_symptom_ids, pathology_id)
     except (ValueError, LookupError) as exc:
         translate_error(exc)
 

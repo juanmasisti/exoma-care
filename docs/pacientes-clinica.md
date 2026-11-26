@@ -23,7 +23,7 @@ Con entorno y `back/.env` preparados, desde `back`:
 ```bash
 ./.venv/Scripts/python.exe -m alembic upgrade head
 ./.venv/Scripts/python.exe -m alembic current
-# Debe informar 0003. Carga opcional de las cinco patologías DEMO:
+# Comparar la revisión con `python -m alembic heads`. Carga opcional del catálogo:
 ./.venv/Scripts/python.exe -m seeders catalog
 bash dev.sh
 ```
@@ -40,4 +40,4 @@ Los tests usan datos ficticios y bases temporales; no requieren cargar pacientes
 
 ## Ampliación EC-08
 
-La familia opcional tiene versión e historial independientes. Ver [información familiar](informacion-familiar.md). La revisión actual del esquema pasa a `0005` (después de `0004` de logística); `0003` documenta el punto de partida de EC-07.
+La familia opcional tiene versión e historial independientes. Ver [información familiar](informacion-familiar.md). Las revisiones `0003` y `0005` documentan el origen de estos módulos. Para preparar el sistema completo, usar la cabeza actual indicada por `alembic heads`.

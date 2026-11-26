@@ -20,6 +20,7 @@ def pathology_record(model: PathologyModel) -> Pathology:
         model.id, model.name, symptom_record(model.cardinal_symptom),
         tuple(symptom_record(s) for s in model.secondary_symptoms),
         model.apigen_code, model.apigen_group, model.cdss_code,
+        tuple(symptom_record(s) for s in model.additional_cardinal_symptoms),
     )
 
 
@@ -32,6 +33,7 @@ class SQLAlchemyPathologyRepository:
         return select(PathologyModel).options(
             selectinload(PathologyModel.cardinal_symptom),
             selectinload(PathologyModel.secondary_symptoms),
+            selectinload(PathologyModel.additional_cardinal_symptoms),
         )
 
     def list_pathologies(self) -> list[Pathology]:
@@ -101,6 +103,9 @@ class SQLAlchemyPathologyRepository:
         model.name = definition.name
         model.normalized_name = normalized
         model.cardinal_symptom_id = definition.cardinal_symptom_id
+        model.additional_cardinal_symptoms = list(self.session.scalars(select(SymptomModel).where(
+            SymptomModel.id.in_(definition.additional_cardinal_ids - {definition.cardinal_symptom_id})
+        ).order_by(SymptomModel.id)))
         model.secondary_symptoms = list(self.session.scalars(select(SymptomModel).where(
             SymptomModel.id.in_(definition.secondary_symptom_ids)
         ).order_by(SymptomModel.id)))

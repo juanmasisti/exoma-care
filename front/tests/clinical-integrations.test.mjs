@@ -95,13 +95,20 @@ test('parent save disables external mutations and draft application', async () =
   await act(async () => root.render(React.createElement(Panel, props)))
   await chooseExternalPathology()
   await act(async () => button('Preparar criterios de').click())
-  await act(async () => {
-    const select = container.querySelector('[aria-label="Cardinal del borrador"]')
-    select.value = '1'; select.dispatchEvent(new dom.Event('change', { bubbles: true }))
-  })
   await act(async () => root.render(React.createElement(Panel, { ...props, disabled: true })))
   assert.equal(button('Asociar identidad').disabled, true)
   assert.equal(button('Preparar criterios de').disabled, true)
   assert.equal(button('Usar criterios').disabled, true)
   assert.equal(button('Crear en Apigen').disabled, true)
 })
+
+ test('CDSS draft preserves every cardinal without demoting any', async () => {
+   const cardinals = [...symptoms, { id: 2, code: '398152000', label: 'Hipotonía', code_system: 'SNOMED' }]
+   api.defaults.adapter = async config => reply(config, config.url.endsWith('/draft') ? { codigo: 'POMPE', cardinals, secondary: [] } : config.url.includes('/apigen/') ? [remotePathology] : [{ codigo: 'POMPE', nombre: 'Pompe', sintomas: [] }])
+   let captured
+   await act(async () => root.render(React.createElement(Panel, { pathology: {id: 1}, onCriteriaDraft: (...args) => captured=args })))
+   await chooseExternalPathology()
+   await act(async () => button('Preparar criterios de').click())
+   await act(async () => button('Usar criterios').click())
+   assert.deepEqual(captured, [cardinals, []])
+ })

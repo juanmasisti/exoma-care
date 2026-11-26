@@ -29,9 +29,9 @@ function App() {
   const labAdmin = session?.role === 'lab_administrator'
   const home = superAdmin ? '/super-admin/usuarios' : bioinformatician ? '/bioinformatica/dashboard' : physician ? '/medico/pacientes' : session?.role === 'medical_manager' ? '/catalogo/patologias' : labAdmin ? '/estudios' : '/portal'
   function roleRoute(roles, page) { return !session ? <Navigate to="/" replace /> : roles.includes(session.role) ? page : <Navigate to={home} replace /> }
-  function patientPage(page) { return !session ? <Navigate to="/" replace /> : physician || superAdmin ? page : <Navigate to={home} replace /> }
+  function patientPage(page) { return !session ? <Navigate to="/" replace /> : physician ? page : <Navigate to={home} replace /> }
   function patientPortalPage(page) { return !session ? <Navigate to="/" replace /> : session.role === 'patient' ? page : <Navigate to={home} replace /> }
-  const catalogAccess = ['medical_manager', 'treating_physician', 'super_admin'].includes(session?.role)
+  const catalogAccess = ['medical_manager', 'treating_physician'].includes(session?.role)
 
   return <Routes>
     <Route path="/" element={session ? <Navigate to={home} replace /> : <Login />} />

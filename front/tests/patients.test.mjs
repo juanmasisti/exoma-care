@@ -226,3 +226,16 @@ test('cambiar de paciente desmonta captura y no permite guardar datos de la fich
   const saved=calls.find(c=>c.method==='put');assert.equal(saved.url,'/patients/2');assert.equal(saved.body.version,3)
   assert.equal(saved.body.clinical_summary,'Resumen segundo paciente')
 })
+
+for (const path of ['/medico/pacientes', '/medico/pacientes/nuevo', '/medico/pacientes/1', '/catalogo/patologias']) {
+  test(`superadministrador no consulta APIs clínicas desde ${path}`, async () => {
+    await render(path, { access_token: 'test', role: 'super_admin' })
+    assert.ok(!calls.some(c => c.url.startsWith('/patients') || c.url === '/pathologies'))
+    assert.ok(!container.querySelector('a[href="/medico/pacientes"]'))
+    assert.ok(!container.querySelector('a[href="/catalogo/patologias"]'))
+  })
+}
+test('ficha con conceptos SNOMED no muestra aviso DEMO', async () => {
+  await render('/medico/pacientes/1')
+  assert.doesNotMatch(container.textContent, /síntomas de demostración históricos/)
+})

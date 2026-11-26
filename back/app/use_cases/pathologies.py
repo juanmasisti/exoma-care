@@ -14,13 +14,16 @@ class PathologyCatalog:
             raise LookupError("La patología no existe.")
         return pathology
 
-    def save(self, name: str, cardinal_id: int, secondary_ids: list[int],
+    def save(self, name: str, cardinal_id: int | list[int], secondary_ids: list[int],
              pathology_id: int | None = None) -> Pathology:
         name = " ".join(name.split())
-        definition = PathologyDefinition(name, cardinal_id, frozenset(secondary_ids))
+        cardinal_ids = list(dict.fromkeys(cardinal_id if isinstance(cardinal_id, list) else [cardinal_id]))
+        if not cardinal_ids:
+            raise ValueError("Seleccioná al menos un cardinal.")
+        definition = PathologyDefinition(name, cardinal_ids[0], frozenset(secondary_ids), frozenset(cardinal_ids[1:]))
         if pathology_id is not None:
             self.get(pathology_id)
-        self._require_symptoms({cardinal_id, *secondary_ids})
+        self._require_symptoms({*cardinal_ids, *secondary_ids})
         return self.repository.save(definition, pathology_id)
 
     def validate(self, pathology_id: int, symptom_ids: list[int]) -> SuspicionValidation:

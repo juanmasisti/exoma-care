@@ -13,6 +13,13 @@ pathology_secondary_symptoms = Table(
 )
 
 
+pathology_additional_cardinals = Table(
+    "pathology_additional_cardinals", Base.metadata,
+    Column("pathology_id", ForeignKey("pathologies.id", ondelete="CASCADE"), primary_key=True),
+    Column("symptom_id", ForeignKey("symptoms.id"), primary_key=True),
+)
+
+
 class SymptomModel(Base):
     __tablename__ = "symptoms"
     __table_args__ = (UniqueConstraint("code_system", "code", name="uq_symptom_code"),)
@@ -36,6 +43,9 @@ class PathologyModel(Base):
     normalized_name: Mapped[str] = mapped_column(String(160), unique=True)
     cardinal_symptom_id: Mapped[int] = mapped_column(ForeignKey("symptoms.id"))
     cardinal_symptom: Mapped[SymptomModel] = relationship(foreign_keys=[cardinal_symptom_id])
+    additional_cardinal_symptoms: Mapped[list[SymptomModel]] = relationship(
+        secondary=pathology_additional_cardinals, order_by=SymptomModel.id,
+    )
     secondary_symptoms: Mapped[list[SymptomModel]] = relationship(
         secondary=pathology_secondary_symptoms, order_by=SymptomModel.id,
     )

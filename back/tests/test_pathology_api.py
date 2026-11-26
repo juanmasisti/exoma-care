@@ -126,3 +126,25 @@ def test_symptom_search_and_unknown_validation_input(client):
     pathology_id = http.post("/api/pathologies", json=definition(), headers=headers).json()["id"]
     assert http.post(f"/api/pathologies/{pathology_id}/validate-suspicion",
                      json={"symptom_ids": [1, 999]}, headers=headers).status_code == 422
+
+
+def test_multiple_cardinals_persist_validate_and_reject_overlap(client):
+    http, _ = client
+    headers = login(http)
+    body = {"name": "Multiple", "cardinal_symptom_ids": [1,2,2], "secondary_symptom_ids": [3,4]}
+    response = http.post("/api/pathologies", json=body, headers=headers)
+    assert response.status_code == 201
+    result = response.json()
+    assert {s["id"] for s in result["cardinal_symptoms"]} == {1,2}
+    path = f"/api/pathologies/{result['id']}"
+    for ids in ([1],[2],[3,4]):
+        check = http.post(path+"/validate-suspicion", json={"symptom_ids":ids}, headers=headers)
+        assert check.status_code == 200 and check.json()["valid"]
+    assert not http.post(path+"/validate-suspicion",json={"symptom_ids":[3,3]},headers=headers).json()["valid"]
+    assert http.put(path,json={**body,"secondary_symptom_ids":[2,3]},headers=headers).status_code==422
+    assert http.put(path,json={**body,"cardinal_symptom_ids":[]},headers=headers).status_code==422
+    assert http.put(path,json={**body,"cardinal_symptom_id":1},headers=headers).status_code==422
+    assert http.put(path,json={**body,"cardinal_symptom_ids":[1,999]},headers=headers).status_code==422
+    # Legacy payload still works and explicitly replaces the configuration.
+    assert http.put(path,json={"name":"Multiple","cardinal_symptom_id":1,"secondary_symptom_ids":[3]},headers=headers).status_code==200
+    assert len(http.get(path,headers=headers).json()["cardinal_symptoms"])==1
